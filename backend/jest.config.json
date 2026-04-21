@@ -1,0 +1,14 @@
+{
+  "preset": "ts-jest",
+  "testEnvironment": "node",
+  "setupFilesAfterEnv": ["<rootDir>/test/setup.js"],
+  "coverageDirectory": "coverage",
+  "collectCoverageFrom": [
+    "src/**/*.ts",
+    "!src/**/*.d.ts"
+  ],
+  "testMatch": [
+    "**/test/**/*.test.ts"
+  ],
+  "verbose": true
+}
