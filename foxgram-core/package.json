@@ -1,0 +1,30 @@
+{
+  "name": "foxgram-core",
+  "version": "1.0.0",
+  "description": "Core library for Foxgram messenger with end-to-end encryption",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "keywords": [
+    "encryption",
+    "end-to-end",
+    "foxgram",
+    "libsodium"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "libsodium-wrappers": "^0.7.13"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/libsodium-wrappers": "^0.7.11",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.6.3"
+  }
+}
