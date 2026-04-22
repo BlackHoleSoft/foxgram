@@ -1,4 +1,4 @@
-import * as sodium from 'libsodium-wrappers';
+import {base64_variants, crypto_box_easy, crypto_box_keypair, crypto_box_NONCEBYTES, crypto_box_open_easy, from_base64, from_string, randombytes_buf, ready, to_base64, to_string} from 'libsodium-wrappers';
 
 /**
  * Generates a new cryptographic keypair for end-to-end encryption
@@ -8,13 +8,13 @@ export async function generateKeypair(): Promise<{
   pubKey: string;
   privateKey: string;
 }> {
-  await sodium.ready;
+  await ready;
 
-  const keypair = sodium.crypto_kx_keypair();
+  const keypair = crypto_box_keypair();
 
   return {
-    pubKey: sodium.to_base64(keypair.publicKey),
-    privateKey: sodium.to_base64(keypair.privateKey),
+    pubKey: to_base64(keypair.publicKey, base64_variants.ORIGINAL),
+    privateKey: to_base64(keypair.privateKey, base64_variants.ORIGINAL),
   };
 }
 
@@ -36,19 +36,19 @@ export async function createMessage(options: {
   senderPayload: string;
   receiverPayload: string;
 }> {
-  await sodium.ready;
+  await ready;
 
   const { senderPrivateKey, senderPublicKey, receiverKey, message } = options;
 
   // Convert base64 keys to Uint8Array
-  const senderPrivKey = sodium.from_base64(senderPrivateKey, sodium.base64_variants.ORIGINAL);
-  const senderPubKey = sodium.from_base64(senderPublicKey, sodium.base64_variants.ORIGINAL);
-  const receiverPubKey = sodium.from_base64(receiverKey, sodium.base64_variants.ORIGINAL);
+  const senderPrivKey = from_base64(senderPrivateKey, base64_variants.ORIGINAL);
+  const senderPubKey = from_base64(senderPublicKey, base64_variants.ORIGINAL);
+  const receiverPubKey = from_base64(receiverKey, base64_variants.ORIGINAL);
 
   // Encrypt for sender (sender's public key)
-  const senderNonce = sodium.randombytes_buf(sodium.crypto_box_NONCEBYTES);
-  const senderPayload = sodium.crypto_box_easy(
-    sodium.from_string(message),
+  const senderNonce = randombytes_buf(crypto_box_NONCEBYTES);
+  const senderPayload = crypto_box_easy(    
+    from_string(message),
     senderNonce,
     senderPubKey,
     senderPrivKey
@@ -60,12 +60,12 @@ export async function createMessage(options: {
     senderTransmissionPacket.set(senderPayload, senderNonce.length);
 
     // Переводим в Base64 для удобной передачи по сети
-    const senderBase64Payload = sodium.to_base64(senderTransmissionPacket, sodium.base64_variants.ORIGINAL);
+    const senderBase64Payload = to_base64(senderTransmissionPacket, base64_variants.ORIGINAL);
 
   // Encrypt for receiver (receiver's public key)
-  const receiverNonce = sodium.randombytes_buf(sodium.crypto_box_NONCEBYTES);
-  const receiverPayload = sodium.crypto_box_easy(
-    sodium.from_string(message),
+  const receiverNonce = randombytes_buf(crypto_box_NONCEBYTES);
+  const receiverPayload = crypto_box_easy(
+    from_string(message),
     receiverNonce,
     receiverPubKey,
     senderPrivKey
@@ -77,7 +77,7 @@ export async function createMessage(options: {
     receiverTransmissionPacket.set(receiverPayload, receiverNonce.length);
 
     // Переводим в Base64 для удобной передачи по сети
-    const receiverBase64Payload = sodium.to_base64(receiverTransmissionPacket, sodium.base64_variants.ORIGINAL);
+    const receiverBase64Payload = to_base64(receiverTransmissionPacket, base64_variants.ORIGINAL);
 
   return {
     senderPayload: senderBase64Payload,
@@ -98,24 +98,24 @@ export async function unboxMessage(options: {
   publicKey: string;
   privateKey: string;
 }): Promise<string> {
-  await sodium.ready;
+  await ready;
 
   const { payload, publicKey, privateKey } = options;
 
   // Convert base64 keys and payload to Uint8Array
-  const pubKey = sodium.from_base64(publicKey, sodium.base64_variants.ORIGINAL);
-  const privKey = sodium.from_base64(privateKey, sodium.base64_variants.ORIGINAL);
-  const transmissionPacket = sodium.from_base64(payload, sodium.base64_variants.ORIGINAL);
+  const pubKey = from_base64(publicKey, base64_variants.ORIGINAL);
+  const privKey = from_base64(privateKey, base64_variants.ORIGINAL);
+  const transmissionPacket = from_base64(payload, base64_variants.ORIGINAL);
 
-  // Извлекаем nonce из первых 24 байт (sodium.crypto_box_NONCEBYTES = 24)
-  const nonceSize = sodium.crypto_box_NONCEBYTES;
+  // Извлекаем nonce из первых 24 байт (crypto_box_NONCEBYTES = 24)
+  const nonceSize = crypto_box_NONCEBYTES;
   const nonce = transmissionPacket.slice(0, nonceSize);
   
   // Извлекаем зашифрованный текст (все байты после nonce)
   const encrypted = transmissionPacket.slice(nonceSize);
 
   // Decrypt the message
-  const decrypted = sodium.crypto_box_open_easy(encrypted, nonce, pubKey, privKey);
+  const decrypted = crypto_box_open_easy(encrypted, nonce, pubKey, privKey);
 
-  return sodium.to_string(decrypted);
+  return to_string(decrypted);
 }
