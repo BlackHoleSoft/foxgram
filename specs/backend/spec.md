@@ -3,14 +3,14 @@
 Бэкенд мессенджера на nodejs + typescript + express + sqlite
 
 SQLite содержит:
-- данные о пользователях
+- данные о пользователях (deprecated)
 - сообщения
 
 В файловой системе хранится зашифрованное содержимое сообщений. Каждое сообщение - отдельный файл с уникальным названием.
 
 ### Структура БД SQLite
 
-user:
+user (deprecated):
 - guid (TEXT) PK
 - name (TEXT)
 - reg_date (TEXT)
@@ -29,7 +29,7 @@ message:
 
 ### API
 
-POST /api/v1/register
+POST /api/v1/register (deprecated)
 {
     "username": "Test user",
 }
