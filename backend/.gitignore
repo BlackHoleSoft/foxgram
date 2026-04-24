@@ -1,4 +1,6 @@
 /dist
 /node_modules
+/messages
+/src/messages
 
 foxgram.db

@@ -18,9 +18,7 @@ db.exec(`
     sender_id TEXT NOT NULL,
     receiver_id TEXT NOT NULL,
     content_guid TEXT NOT NULL,
-    create_date TEXT NOT NULL,
-    FOREIGN KEY (sender_id) REFERENCES user(guid),
-    FOREIGN KEY (receiver_id) REFERENCES user(guid)
+    create_date TEXT NOT NULL
   );
 
   CREATE INDEX IF NOT EXISTS idx_message_sender_receiver ON message(sender_id, receiver_id);

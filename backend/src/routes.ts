@@ -36,13 +36,13 @@ router.post('/messages/send', (req, res) => {
       return;
     }
 
-    if (!validateGuid(sender)) {
-      res.status(400).json({ error: 'Invalid sender GUID' });
+    if (!sender) {
+      res.status(400).json({ error: 'Invalid sender' });
       return;
     }
 
-    if (!validateGuid(receiver)) {
-      res.status(400).json({ error: 'Invalid receiver GUID' });
+    if (!receiver) {
+      res.status(400).json({ error: 'Invalid receiver' });
       return;
     }
 
@@ -52,13 +52,13 @@ router.post('/messages/send', (req, res) => {
     }
 
     // Check if users exist
-    const senderUser = User.findById(sender);
-    const receiverUser = User.findById(receiver);
+    // const senderUser = User.findById(sender);
+    // const receiverUser = User.findById(receiver);
 
-    if (!senderUser || !receiverUser) {
-      res.status(404).json({ error: 'Sender or receiver not found' });
-      return;
-    }
+    // if (!senderUser || !receiverUser) {
+    //   res.status(404).json({ error: 'Sender or receiver not found' });
+    //   return;
+    // }
 
     const contentGuid = Message.send(sender, receiver, payload);
     Message.saveFile(contentGuid, payload);
