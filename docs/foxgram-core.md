@@ -1,179 +1,191 @@
-# foxgram-core — SDK для Foxgram
+# foxgram-core — Foxgram SDK
 
-## Обзор
+## Overview
 
-JavaScript SDK для работы с Foxgram API. Используется CLI клиентом для всех операций:
-- Шифрование/расшифровка сообщений
-- Работа с ключами (X25519)
-- Взаимодействие с сервером
-- Локальное хранение контактов и конфигурации
+TypeScript SDK for working with Foxgram API. Used by the CLI client for all operations:
+- Message encryption/decryption
+- Key management (X25519)
+- Server communication
+- Local storage of contacts and configuration
 
-**Требования:**
+**Requirements:**
 - Node.js 18+
-- Чистый JavaScript (без нативных модулей для portability)
-- Fallback на TweetNaCl.js если libsodium недоступен
+- TypeScript
+- Pure JavaScript (no native modules) for portability
+- Fallback to TweetNaCl.js if libsodium unavailable
 
 ---
 
-## Структура проекта
+## Project Structure
 
 ```
 packages/foxgram-core/
 ├── package.json
+├── tsconfig.json
 ├── src/
-│   ├── index.js          # публичный API, экспорт
-│   ├── crypto.js         # шифрование, ключи
-│   ├── api.js            # взаимодействие с бэкендом
-│   ├── storage.js        # локальное хранение
-│   └── types.ts          # TypeScript definitions (опционально)
+│   ├── index.ts           # public API, exports
+│   ├── crypto.ts          # encryption, keys
+│   ├── api.ts             # server communication
+│   ├── storage.ts         # local storage
+│   └── types.ts           # TypeScript definitions
 └── README.md
 ```
 
 ---
 
-## Публичный API (index.js)
+## Public API (index.ts)
 
-```javascript
-const Foxgram = require('foxgram-core');
+```typescript
+import { Foxgram } from 'foxgram-core';
 
-// Инициализация
+// Initialization — serverUrl from config.json
 const client = new Foxgram({
-  serverUrl: 'http://localhost:3000',
-  homeDir: '~/.foxgram'
+  serverUrl: 'http://localhost:3000'
 });
 
-// Регистрация
+// Registration — keys generated on client
 await client.register({
   username: 'alice',
-  password: 'secretpass123',
-  secretKey: 'base64url...' // опционально, сгенерирует новый если не указан
+  password: 'secretpass123'
 });
 
-// Вход
+// Login
 await client.login({
   username: 'alice',
   password: 'secretpass123'
 });
 
-// Отправка сообщения
+// Send message
 const { messageId, timestamp } = await client.sendMessage({
   recipientId: 'user-uuid',
   plaintext: 'Hello!'
 });
 
-// Получение сообщений
+// Get messages for specific user (open chat)
 const { messages } = await client.getMessages({
   userId: 'user-uuid'
 });
 
-// Работа с контактами
+// Get all messages (for future sync)
+const { messages } = await client.getAllMessages();
+
+// Work with contacts
 const contacts = await client.getContacts();
 await client.addContact({ username: 'bob', publicKey: '...' });
 await client.removeContact('contact-uuid');
 
-// Проверка статуса
+// Check status
 const isLoggedIn = client.isAuthenticated();
 const userId = client.getUserId();
+
+// Decrypt message
+const plaintext = client.decryptMessage(message);
 ```
 
 ---
 
-## Crypto модуль (crypto.js)
+## Crypto Module (crypto.ts)
 
-### Ключевая пара
+### Key Pair
 
-```javascript
-const { generateKeyPair, getPublicKey, importSecretKey } = require('./crypto');
+```typescript
+import { generateKeyPair, getPublicKey, importSecretKey } from './crypto';
 
-// Генерация новой пары
+// Generate new pair
 const { publicKey, secretKey } = generateKeyPair();
-// publicKey, secretKey — base64url строки, 32 байта
+// publicKey, secretKey — base64url strings, 32 bytes
 
-// Получение публичного ключа из приватного
+// Get public key from private
 const publicKey = getPublicKey(secretKey);
 
-// Импорт ключа из base64url строки
+// Import key from base64url string
 const key = importSecretKey('base64url...');
 ```
 
-### Шифрование сообщений
+### Message Encryption
 
-```javascript
-const { encryptMessage, decryptMessage } = require('./crypto');
+```typescript
+import { encryptMessage, decryptMessage } from './crypto';
 
-// Шифрование
+// Encrypt
 const { encryptedContent, nonce } = encryptMessage({
-  message: 'Hello Bob!',      // string
-  mySecretKey: 'base64url...', // наш приватный ключ
-  theirPublicKey: 'base64url...' // публичный ключ получателя
+  message: 'Hello Bob!',       // string
+  mySecretKey: 'base64url...', // our private key
+  theirPublicKey: 'base64url...' // recipient's public key
 });
 // Returns: { encryptedContent: 'base64url...', nonce: 'base64url...' }
+// Note: encryptedContent contains nonce || ciphertext
 
-// Расшифровка
+// Decrypt
 const plaintext = decryptMessage({
   encryptedContent: 'base64url...',
-  nonce: 'base64url...',
   mySecretKey: 'base64url...',
   theirPublicKey: 'base64url...'
 });
 // Returns: 'Hello Bob!'
 ```
 
-### Криптографическая схема
+### Cryptographic Scheme
 
 ```
 shared_secret = X25519(my_secret_key, their_public_key)
 nonce = random(24 bytes)
-encrypted_message = XChaCha20-Poly1305(key=shared_secret, nonce=nonce, plaintext)
+ciphertext = XChaCha20-Poly1305(key=shared_secret, nonce=nonce, plaintext)
+stored_content = base64url(nonce || ciphertext)
 ```
 
 ---
 
-## API модуль (api.js)
+## API Module (api.ts)
 
-### Конфигурация
+### Configuration
 
-```javascript
-const ApiClient = require('./api');
+```typescript
+import { ApiClient } from './api';
 
 const api = new ApiClient({
   serverUrl: 'http://localhost:3000',
-  token: 'jwt-token...' // устанавливается после login/register
+  token: 'jwt-token...' // set after login/register
 });
 ```
 
-### Методы
+### Methods
 
-```javascript
-// Регистрация
+```typescript
+// Registration
 await api.register({ username, password, publicKey });
 // POST /api/auth/register
 // Returns: { token, userId }
 
-// Вход
+// Login
 await api.login({ username, password });
 // POST /api/auth/login
 // Returns: { token, userId }
 
-// Получение публичного ключа пользователя
+// Get user's public key
 await api.getUserPublicKey(userId);
 // GET /api/users/:id/public-key
 // Returns: { userId, username, publicKey }
 
-// Отправка сообщения
-await api.sendMessage({ recipientId, encryptedContent, nonce });
+// Send message
+await api.sendMessage({ recipientId, encryptedContent });
 // POST /api/messages/send
 // Returns: { messageId, timestamp }
 
-// Получение сообщений с пользователем
+// Get messages with specific user (CLI uses this)
 await api.getMessages(userId);
 // GET /api/messages/poll?userId=<id>
 // Returns: { messages: [...] }
+
+// Get all messages (for future sync)
+await api.getAllMessages();
+// GET /api/messages/poll
+// Returns: { messages: [...] }
 ```
 
-### Обработка ошибок
+### Error Handling
 
-```javascript
+```typescript
 try {
   await api.register({ username, password, publicKey });
 } catch (err) {
@@ -187,25 +199,25 @@ try {
 
 ---
 
-## Storage модуль (storage.js)
+## Storage Module (storage.ts)
 
-### Расположение файлов
+### File Locations
 
 ```
 ~/.foxgram/
 ├── config.json    # serverUrl, userId, username, publicKey, secretKey, token
-└── contacts.json  # массив контактов
+└── contacts.json  # array of contacts
 ```
 
-### Методы
+### Methods
 
-```javascript
-const Storage = require('./storage');
+```typescript
+import { Storage } from './storage';
 
-// Инициализация хранилища
+// Initialize storage
 const storage = new Storage({ homeDir: '~/.foxgram' });
 
-// Сохранение конфигурации
+// Save configuration
 await storage.saveConfig({
   serverUrl: 'http://localhost:3000',
   userId: 'uuid',
@@ -215,25 +227,25 @@ await storage.saveConfig({
   token: 'jwt...'
 });
 
-// Загрузка конфигурации
+// Load configuration
 const config = await storage.loadConfig();
 // Returns: { serverUrl, userId, username, publicKey, secretKey, token }
 
-// Сохранение контактов
+// Save contacts
 await storage.saveContacts([
   { userId: 'uuid1', username: 'bob', publicKey: 'base64url...' },
   { userId: 'uuid2', username: 'charlie', publicKey: 'base64url...' }
 ]);
 
-// Загрузка контактов
+// Load contacts
 const contacts = await storage.loadContacts();
 // Returns: [{ userId, username, publicKey }, ...]
 
-// Очистка (выход)
+// Clear (logout)
 await storage.clear();
 ```
 
-### contacts.json структура
+### contacts.json Structure
 
 ```json
 [
@@ -244,68 +256,93 @@ await storage.clear();
 
 ---
 
-## Типы (types.ts) — опционально
+## Types (types.ts)
 
 ```typescript
-interface FoxgramConfig {
+// Configuration
+export interface FoxgramConfig {
   serverUrl: string;
   homeDir?: string;
 }
 
-interface KeyPair {
+// Key pair
+export interface KeyPair {
   publicKey: string;  // base64url, 32 bytes
   secretKey: string;  // base64url, 32 bytes
 }
 
-interface Contact {
+// Contact
+export interface Contact {
   userId: string;
   username: string;
   publicKey: string;  // base64url
 }
 
-interface Message {
+// Message (stored format)
+export interface StoredMessage {
   id: string;
   senderId: string;
-  encryptedContent: string;  // base64url
-  nonce: string;            // base64url
+  encryptedContent: string;  // base64url, contains nonce || ciphertext
   timestamp: number;
 }
 
-interface SendMessageResult {
+// Decrypted message (for UI)
+export interface DecryptedMessage {
+  id: string;
+  senderId: string;
+  senderUsername: string;
+  content: string;  // plaintext
+  timestamp: number;
+  isOutgoing: boolean;
+}
+
+// Send message result
+export interface SendMessageResult {
   messageId: string;
   timestamp: number;
 }
 
-interface AuthResult {
+// Auth result
+export interface AuthResult {
   token: string;
   userId: string;
+}
+
+// API errors
+export interface ApiError {
+  code: string;
+  message: string;
 }
 ```
 
 ---
 
-## Использование в CLI
+## Usage in CLI
 
-```javascript
-const Foxgram = require('foxgram-core');
+```typescript
+import { Foxgram } from 'foxgram-core';
 
 async function main() {
-  const client = new Foxgram({ serverUrl: 'http://localhost:3000' });
+  // Read serverUrl from config
+  const config = await storage.loadConfig();
   
-  // Регистрация
+  const client = new Foxgram({
+    serverUrl: config.serverUrl
+  });
+  
+  // Registration — keys generated automatically
   await client.register({
     username: 'alice',
     password: 'secretpass123'
-    // secretKey можно не указывать — сгенерируется автоматически
   });
   
-  // Сохраняем конфигурацию
+  // Save configuration
   await client.saveConfig();
   
-  // Получаем сообщения
+  // Get messages for specific chat
   const { messages } = await client.getMessages({ userId: 'bob-uuid' });
   
-  // Расшифровываем каждое сообщение
+  // Decrypt each message
   for (const msg of messages) {
     const plaintext = client.decryptMessage(msg);
     console.log(`${msg.senderId}: ${plaintext}`);
@@ -315,34 +352,48 @@ async function main() {
 
 ---
 
-## Зависимости
+## Dependencies
 
 ```json
 {
   "name": "foxgram-core",
   "version": "1.0.0",
-  "main": "src/index.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "dependencies": {
     "libsodium-wrappers": "^0.7.0",
     "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
   }
 }
 ```
 
-**Fallback:** Если libsodium-wrappers не доступен (например, в браузере без WebAssembly), используется TweetNaCl.js.
+**Fallback:** If libsodium-wrappers is not available (e.g., browser without WebAssembly), TweetNaCl.js is used.
 
 ---
 
-## Тестирование
+## Testing
 
 ```bash
 cd packages/foxgram-core
 npm test
 
-# Тесты должны покрывать:
-# - Генерация ключей
-# - Шифрование/расшифровка
-# - Импорт/экспорт ключей
-# - Валидация формата ключей
-# - API mock для интеграционных тестов
+# Tests should cover:
+# - Key generation
+# - Encryption/decryption
+# - Key import/export
+# - Key format validation
+# - API mock for integration tests
+```
+
+---
+
+## Building
+
+```bash
+npm run build
+# Compiles TypeScript to dist/
 ```

@@ -1,47 +1,48 @@
-# Backend — Серверная часть Foxgram
+# Backend — Foxgram Server
 
-## Обзор
+## Overview
 
-Express сервер на Node.js, отвечает за:
-- Аутентификация пользователей (логин/пароль → JWT)
-- Хранение зашифрованных сообщений (blob в файлах, мета в БД)
-- Хранение публичных ключей пользователей
-- API для отправки/получения сообщений
-- Polling для получения новых сообщений
+Express server on Node.js with TypeScript, responsible for:
+- User authentication (login/password → JWT)
+- Encrypted message storage (blob in files, metadata in DB)
+- Public key storage
+- API for sending/receiving messages
+- Polling for new messages
 
 ---
 
-## Структура проекта
+## Project Structure
 
 ```
 packages/backend/
 ├── package.json
+├── tsconfig.json
 ├── src/
-│   ├── index.js              # точка входа
-│   ├── logger.js             # сервис логирования
-│   ├── config.js             # загрузка конфигурации
+│   ├── index.ts              # entry point
+│   ├── logger.ts             # logging service
+│   ├── config.ts             # configuration loader
 │   ├── db/
-│   │   ├── schema.sql        # схема БД
-│   │   └── index.js          # SQLite инициализация, миграции
+│   │   ├── schema.sql        # database schema
+│   │   └── index.ts          # SQLite initialization, migrations
 │   ├── routes/
-│   │   ├── auth.js           # POST /api/auth/register, /api/auth/login
-│   │   ├── messages.js      # POST /api/messages/send, GET /api/messages/poll
-│   │   └── users.js         # GET /api/users/:id/public-key
+│   │   ├── auth.ts           # POST /api/auth/register, /api/auth/login
+│   │   ├── messages.ts       # POST /api/messages/send, GET /api/messages/poll
+│   │   └── users.ts          # GET /api/users/:id/public-key
 │   ├── middleware/
-│   │   └── auth.js          # JWT verification middleware
+│   │   └── auth.ts           # JWT verification middleware
 │   └── utils/
 └── data/
-    ├── foxgram.db            # SQLite база
-    └── messages/             # зашифрованные blob файлы
+    ├── foxgram.db            # SQLite database
+    └── messages/             # encrypted blob files
         ├── <uuid1>.bin
         └── <uuid2>.bin
 ```
 
 ---
 
-## База данных (SQLite)
+## Database (SQLite)
 
-### Таблица users
+### users table
 ```sql
 CREATE TABLE users (
   id TEXT PRIMARY KEY,
@@ -52,7 +53,7 @@ CREATE TABLE users (
 );
 ```
 
-### Таблица messages
+### messages table
 ```sql
 CREATE TABLE messages (
   id TEXT PRIMARY KEY,
@@ -63,14 +64,15 @@ CREATE TABLE messages (
 );
 ```
 
-### Правила
-- `id` пользователей и сообщений — UUID (string)
-- Имена файлов сообщений: `data/messages/<uuid>.bin`
-- Контент сообщений хранится в файлах как зашифрованные blob'ы (base64url)
+### Rules
+- User and message IDs are UUIDs (strings)
+- Message file names: `data/messages/<uuid>.bin`
+- Message content stored as encrypted blob (base64url)
+- encryptedContent contains: `nonce || ciphertext` concatenated
 
 ---
 
-## Конфигурация (.env)
+## Configuration (.env)
 
 ```env
 PORT=3000
@@ -79,20 +81,20 @@ JWT_SECRET=<random-64-chars>
 LOG_LEVEL=debug
 ```
 
-### Уровни логирования
-- `debug` — все запросы с телами, полезно для отладки
-- `info` — общая информация
-- `warn` — предупреждения
-- `error` — ошибки
+### Logging Levels
+- `debug` — all requests with bodies, useful for debugging
+- `info` — general information
+- `warn` — warnings
+- `error` — errors
 
 ---
 
 ## API Endpoints
 
-### Аутентификация
+### Authentication
 
 #### POST /api/auth/register
-Регистрация нового пользователя.
+Register a new user.
 
 **Request:**
 ```json
@@ -103,7 +105,7 @@ LOG_LEVEL=debug
 }
 ```
 
-**Response (200):**
+**Response (201):**
 ```json
 {
   "token": "eyJhbGciOiJIUzI1NiIs...",
@@ -116,15 +118,15 @@ LOG_LEVEL=debug
 - `400 { "error": "Invalid public key format" }`
 - `400 { "error": "Password must be at least 8 characters" }`
 
-**Валидация:**
-- username: `a-zA-Z0-9_`, 3-32 символа
-- password: минимум 8 символов
-- publicKey: base64url, 32 байта
+**Validation:**
+- username: `[a-zA-Z0-9_]`, 3-32 characters
+- password: minimum 8 characters
+- publicKey: base64url, 32 bytes
 
 ---
 
 #### POST /api/auth/login
-Вход существующего пользователя.
+Login with existing credentials.
 
 **Request:**
 ```json
@@ -144,14 +146,14 @@ LOG_LEVEL=debug
 
 **Errors:**
 - `401 { "error": "Invalid credentials" }`
-- `401 { "error": "Key mismatch" }` — публичный ключ не совпадает с хранимым
+- `401 { "error": "Key mismatch" }` — public key doesn't match stored
 
 ---
 
-### Сообщения
+### Messages
 
 #### POST /api/messages/send
-Отправка зашифрованного сообщения.
+Send an encrypted message.
 
 **Headers:**
 ```
@@ -162,8 +164,7 @@ Authorization: Bearer <token>
 ```json
 {
   "recipientId": "550e8400-e29b-41d4-a716-446655440001",
-  "encryptedContent": "YWJjZGVmZ2hpamtsbW5vcA...",
-  "nonce": "YWJjZGVmZ2hpamtsbW5vcA"
+  "encryptedContent": "YWJjZGVmZ2hpamtsbW5vcA..."
 }
 ```
 
@@ -180,17 +181,17 @@ Authorization: Bearer <token>
 - `400 { "error": "Invalid message format" }`
 - `401 { "error": "Unauthorized" }`
 
-**Логика:**
-1. Проверить JWT
-2. Проверить существование recipient
-3. Сгенерировать UUID для messageId
-4. Сохранить метаинформацию в БД
-5. Сохранить encryptedContent в файл `data/messages/<messageId>.bin`
+**Logic:**
+1. Verify JWT
+2. Check recipient exists
+3. Generate UUID for messageId
+4. Save metadata to DB
+5. Save encryptedContent to file `data/messages/<messageId>.bin`
 
 ---
 
-#### GET /api/messages/poll?userId=<id>
-Получение сообщений с конкретным пользователем.
+#### GET /api/messages/poll
+Poll messages with optional filter by conversation partner.
 
 **Headers:**
 ```
@@ -198,7 +199,7 @@ Authorization: Bearer <token>
 ```
 
 **Query parameters:**
-- `userId` — обязательный, ID пользователя для фильтрации
+- `userId` (optional): filter by conversation partner
 
 **Response (200):**
 ```json
@@ -208,7 +209,6 @@ Authorization: Bearer <token>
       "id": "550e8400-e29b-41d4-a716-446655440002",
       "senderId": "550e8400-e29b-41d4-a716-446655440000",
       "encryptedContent": "YWJjZGVmZ2hpamtsbW5vcA...",
-      "nonce": "YWJjZGVmZ2hpamtsbW5vcA",
       "timestamp": 1715260800000
     }
   ]
@@ -216,21 +216,20 @@ Authorization: Bearer <token>
 ```
 
 **Errors:**
-- `400 { "error": "userId is required" }`
 - `401 { "error": "Unauthorized" }`
 
-**Логика:**
-1. Проверить JWT
-2. Найти все сообщения где (sender_id = userId AND recipient_id = currentUser) OR (sender_id = currentUser AND recipient_id = userId)
-3. Для каждого сообщения прочитать содержимое из файла
-4. Вернуть массив сообщений
+**Logic:**
+1. Verify JWT
+2. If `userId` provided: return messages between current user and specified user
+3. If no `userId`: return all messages for current user (future-proofing)
+4. For each message, read encrypted content from file
 
 ---
 
-### Пользователи
+### Users
 
 #### GET /api/users/:id/public-key
-Получение публичного ключа пользователя.
+Get a user's public key.
 
 **Response (200):**
 ```json
@@ -248,26 +247,53 @@ Authorization: Bearer <token>
 
 ## Middleware
 
-### auth.js
+### auth.ts
 JWT verification middleware.
 
-```javascript
-function authMiddleware(req, res, next) {
-  // Извлечь Bearer token из заголовка
-  // Проверить JWT с помощью JWT_SECRET
-  // Добавить req.userId в запрос
-  // При ошибке вернуть 401
+```typescript
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+
+declare global {
+  namespace Express {
+    interface Request {
+      userId?: string;
+    }
+  }
+}
+
+export function authMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader?.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const token = authHeader.slice(7);
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+    req.userId = decoded.userId;
+    next();
+  } catch {
+    res.status(401).json({ error: 'Unauthorized' });
+  }
 }
 ```
 
 ---
 
-## Logger сервис
+## Logger Service
 
-### logger.js
+### logger.ts
 
-```javascript
-const logger = require('./logger');
+```typescript
+import { logger } from './logger';
 
 logger.debug('Request body:', req.body);
 logger.info('User logged in:', username);
@@ -275,51 +301,83 @@ logger.warn('Rate limit exceeded for:', ip);
 logger.error('Database error:', err);
 ```
 
-### Уровни логирования
-- `debug` — verbose, все запросы с телами
-- `info` — обычная информация
-- `warn` — предупреждения
-- `error` — ошибки
+### Logging Levels
+- `debug` — verbose, all requests with bodies
+- `info` — general information
+- `warn` — warnings
+- `error` — errors
 
 ---
 
-## Безопасность
+## Security
 
-- Никогда не логировать пароли или секретные ключи
-- JWT токен истекает через 7 дней
-- Пароли хешируются с помощью argon2
-- Приватный ключ не хранится на сервере
-- Проверка формата публичного ключа при регистрации
-- Проверка соответствия ключей при входе
+- Never log passwords or secret keys
+- JWT token expires after 7 days
+- Passwords hashed with argon2
+- Private key not stored on server
+- Public key format validation on registration
+- Key matching verification on login
 
 ---
 
-## Запуск
+## Running
 
 ```bash
 cd packages/backend
 npm install
 cp .env.example .env
-# редактировать .env
+# edit .env
 npm start
 ```
 
-Сервер запустится на порту из PORT (по умолчанию 3000).
+Server will start on the port from PORT (default 3000).
 
 ---
 
-## Зависимости
+## Dependencies
 
 ```json
 {
   "express": "^4.18.0",
   "better-sqlite3": "^11.0.0",
   "jsonwebtoken": "^9.0.0",
-  "bcrypt": "^5.1.0",
   "uuid": "^9.0.0",
   "dotenv": "^16.0.0",
-  "argon2": "^0.31.0"
+  "argon2": "^0.31.0",
+  "typescript": "^5.0.0",
+  "@types/express": "^4.17.0",
+  "@types/node": "^20.0.0",
+  "@types/better-sqlite3": "^7.6.0",
+  "@types/jsonwebtoken": "^9.0.0"
 }
 ```
 
-**Примечание:** argon2 заменит bcrypt для хеширования паролей.
+---
+
+## Types
+
+```typescript
+interface User {
+  id: string;
+  username: string;
+  passwordHash: string;
+  publicKey: string;
+  createdAt: number;
+}
+
+interface Message {
+  id: string;
+  senderId: string;
+  recipientId: string;
+  createdAt: number;
+}
+
+interface SendMessageRequest {
+  recipientId: string;
+  encryptedContent: string;
+}
+
+interface PollMessagesRequest {
+  userId?: string;
+}
+```

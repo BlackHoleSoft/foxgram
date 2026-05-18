@@ -1,44 +1,46 @@
-# CLI — TUI клиент Foxgram
+# CLI — Foxgram TUI Client
 
-## Обзор
+## Overview
 
-Минималистичный терминальный (TUI) клиент для Foxgram. Использует Ink (React-подобный) или Blessed для построения интерфейса.
+Minimalist terminal (TUI) client for Foxgram. Uses Ink (React-like) or Blessed for interface building.
 
-**Требования:**
+**Requirements:**
 - Node.js 18+
+- TypeScript
 - foxgram-core SDK
-- Ink или Blessed
+- Ink or Blessed
 
 ---
 
-## Структура проекта
+## Project Structure
 
 ```
 packages/cli/
 ├── package.json
+├── tsconfig.json
 ├── src/
-│   ├── index.js           # точка входа, CLI arguments parsing
-│   ├── cli.js             # yargs или similar
-│   ├── app.js             # главный TUI компонент
-│   ├── state.js           # управление состоянием (MobX/Redux/simple)
+│   ├── index.ts              # entry point, CLI arguments parsing
+│   ├── cli.ts               # yargs or similar
+│   ├── app.ts               # main TUI component
+│   ├── state.ts             # state management (MobX/Redux/simple)
 │   ├── screens/
-│   │   ├── login.js       # экран входа
-│   │   ├── register.js    # экран регистрации
-│   │   ├── contact-list.js # список контактов
-│   │   ├── add-contact.js  # добавление контакта
-│   │   ├── delete-contacts.js # удаление контактов
-│   │   └── chat.js        # окно чата
-│   └── components/        # переиспользуемые компоненты
-│       ├── input.js       # текстовый input
-│       ├── button.js      # кнопка
-│       ├── list.js        # список с выбором
-│       └── checkbox.js    # чекбокс (для удаления)
+│   │   ├── login.ts         # login screen
+│   │   ├── register.ts      # registration screen
+│   │   ├── contact-list.ts  # contacts list
+│   │   ├── add-contact.ts   # add contact
+│   │   ├── delete-contacts.ts # delete contacts
+│   │   └── chat.ts          # chat window
+│   └── components/          # reusable components
+│       ├── input.ts         # text input
+│       ├── button.ts        # button
+│       ├── list.ts          # selectable list
+│       └── checkbox.ts      # checkbox (for deletion)
 └── README.md
 ```
 
 ---
 
-## Экраны
+## Screens
 
 ### 1. Login
 
@@ -46,9 +48,9 @@ packages/cli/
 ┌─────────────────────────────────┐
 │           FOXGRAM               │
 │                                 │
-│  Username: [____________]        │
+│  Username: [____________]       │
 │                                 │
-│  Password: [____________]        │
+│  Password: [____________]       │
 │                                 │
 │        [ Login ]                │
 │                                 │
@@ -58,17 +60,17 @@ packages/cli/
 └─────────────────────────────────┘
 ```
 
-**Поля:**
+**Fields:**
 - Username (required)
 - Password (required)
-- Кнопка "Login"
-- Ссылка на Register
-- Отображение serverUrl
+- "Login" button
+- Link to Register
+- Display serverUrl
 
-**Действия:**
+**Actions:**
 - Enter — submit
-- Tab — следующее поле
-- Register — переход на экран регистрации
+- Tab — next field
+- Register — go to registration screen
 
 ---
 
@@ -79,9 +81,9 @@ packages/cli/
 │           FOXGRAM               │
 │         Register                │
 │                                 │
-│  Username: [____________]        │
+│  Username: [____________]       │
 │                                 │
-│  Password: [____________]        │
+│  Password: [____________]       │
 │                                 │
 │  Private Key (optional):        │
 │  [________________________________] │
@@ -94,21 +96,19 @@ packages/cli/
 └─────────────────────────────────┘
 ```
 
-**Поля:**
+**Fields:**
 - Username (required)
 - Password (min 8 chars)
 - Private Key (optional) — base64url, 32 bytes
-- Кнопка "Generate new key"
-- Кнопка "Register"
-- Ссылка на Login
 
-**Действия:**
-- "Generate new key" — генерирует новую пару и заполняет поле
-- Если Private Key пуст — генерируется автоматически
+**Actions:**
+- "Generate new key" — generates new pair on client, fills field with secretKey
+- If Private Key is empty — pair generated automatically by foxgram-core
+- Client computes publicKey from secretKey and sends to server
 
 ---
 
-### 3. Contact List (главный экран)
+### 3. Contact List (main screen)
 
 ```
 ┌─────────────────────────────────┐
@@ -129,17 +129,17 @@ packages/cli/
 └─────────────────────────────────┘
 ```
 
-**Элементы:**
-- Header с username и иконка настроек
-- Список контактов (radio buttons)
-- Кнопки: Chat, Add, Delete, Logout
+**Elements:**
+- Header with username and settings icon
+- Contacts list (radio buttons)
+- Buttons: Chat, Add, Delete, Logout
 
-**Действия:**
-- Enter на контакте — выбор
-- Chat — открыть выбранный контакт
-- Add — переход на экран добавления
-- Delete — переход на экран удаления
-- Logout — выход, очистка config
+**Actions:**
+- Enter on contact — select
+- Chat — open selected contact
+- Add — go to add contact screen
+- Delete — go to delete contacts screen
+- Logout — exit, clear config
 
 ---
 
@@ -150,7 +150,7 @@ packages/cli/
 │  ← Back        Add Contact      │
 ├─────────────────────────────────┤
 │                                 │
-│  Username: [____________]        │
+│  Username: [____________]       │
 │                                 │
 │  Public Key:                    │
 │  [________________________________] │
@@ -160,13 +160,17 @@ packages/cli/
 └─────────────────────────────────┘
 ```
 
-**Поля:**
+**Fields:**
 - Username (required)
 - Public Key (required) — base64url, 32 bytes
 
-**Действия:**
-- Add Contact — валидация и сохранение в contacts.json
-- Back — возврат к списку контактов
+**Notes:**
+- Keys are exchanged manually (verbally, file, QR)
+- No server-side user search in MVP
+
+**Actions:**
+- Add Contact — validate and save to contacts.json
+- Back — return to contacts list
 
 ---
 
@@ -188,14 +192,14 @@ packages/cli/
 └─────────────────────────────────┘
 ```
 
-**Элементы:**
-- Список контактов с чекбоксами
-- Кнопка "Delete Selected"
+**Elements:**
+- Contacts list with checkboxes
+- "Delete Selected" button
 
-**Действия:**
+**Actions:**
 - Space — toggle checkbox
-- Delete Selected — удалить отмеченные из contacts.json
-- Back — возврат к списку контактов
+- Delete Selected — remove checked from contacts.json
+- Back — return to contacts list
 
 ---
 
@@ -219,92 +223,109 @@ packages/cli/
 └─────────────────────────────────┘
 ```
 
-**Элементы:**
-- Header с username собеседника
-- Область сообщений (скроллируемая)
-- Input field + кнопка Send
+**Elements:**
+- Header with contact's username
+- Messages area (scrollable)
+- Input field + Send button
 
-**Формат сообщений:**
-- Отправленные: справа, свой username
-- Полученные: слева, username собеседника
+**Message format:**
+- Outgoing: right-aligned, our username
+- Incoming: left-aligned, contact's username
 - Timestamp: [HH:MM]
 
-**Действия:**
-- Enter — отправить сообщение
-- Стрелки — скролл истории
-- Back — возврат к списку контактов
-- Автообновление каждые N секунд
+**Actions:**
+- Enter — send message
+- Arrows — scroll history
+- Back — return to contacts list
+- Auto-refresh every N seconds for current chat only
 
 ---
 
-## Состояние приложения (state.js)
+## Application State (state.ts)
 
-```javascript
-// State structure
-{
-  screen: 'login' | 'register' | 'contact-list' | 'add-contact' | 'delete-contacts' | 'chat',
-  isAuthenticated: boolean,
-  user: {
-    userId: string,
-    username: string,
-    publicKey: string,
-    secretKey: string
-  },
-  contacts: [
-    { userId, username, publicKey }
-  ],
-  selectedContactId: string | null,
-  messages: {
-    [userId]: Message[]
-  },
-  config: {
-    serverUrl: string
-  },
-  error: string | null,
-  isLoading: boolean
+```typescript
+type Screen = 'login' | 'register' | 'contact-list' | 'add-contact' | 'delete-contacts' | 'chat';
+
+interface AppState {
+  screen: Screen;
+  isAuthenticated: boolean;
+  user: User | null;
+  contacts: Contact[];
+  selectedContactId: string | null;
+  messages: Record<string, StoredMessage[]>;
+  config: Config;
+  error: string | null;
+  isLoading: boolean;
+}
+
+interface User {
+  userId: string;
+  username: string;
+  publicKey: string;
+  secretKey: string;
+}
+
+interface Contact {
+  userId: string;
+  username: string;
+  publicKey: string;
+}
+
+interface StoredMessage {
+  id: string;
+  senderId: string;
+  encryptedContent: string;
+  timestamp: number;
+}
+
+interface Config {
+  serverUrl: string;
 }
 ```
 
-**Методы:**
-```javascript
-setScreen(screen)
-setUser(user)
-addContact(contact)
-removeContact(userId)
-setSelectedContact(userId)
-addMessage(userId, message)
-setError(error)
-clearError()
-logout()
+**Methods:**
+```typescript
+setScreen(screen: Screen): void
+setUser(user: User): void
+addContact(contact: Contact): void
+removeContact(userId: string): void
+setSelectedContact(userId: string | null): void
+addMessage(userId: string, message: StoredMessage): void
+setError(error: string): void
+clearError(): void
+logout(): void
 ```
 
 ---
 
-## Polling (автообновление)
+## Polling (auto-refresh)
 
-После входа клиент запускает polling для каждого открытого чата:
+After login, client polls messages only for the currently open chat:
 
-```javascript
-// Каждые 10 секунд
+```typescript
+// Every 10 seconds (or configurable)
 async function pollMessages() {
-  for (const contact of contacts) {
-    const { messages } = await api.getMessages(contact.userId);
-    for (const msg of messages) {
-      if (!seenMessages.has(msg.id)) {
-        state.addMessage(contact.userId, msg);
-        seenMessages.add(msg.id);
-        // Показать уведомление если не в этом чате
-      }
+  if (!currentContactId) return;
+  
+  const { messages } = await api.getMessages(currentContactId);
+  
+  for (const msg of messages) {
+    if (!seenMessages.has(msg.id)) {
+      state.addMessage(currentContactId, msg);
+      seenMessages.add(msg.id);
+      // Show notification if not in this chat
     }
   }
 }
 ```
 
+Note: `GET /api/messages/poll` without `userId` is available on backend for future features (e.g., notifications badge).
+
 ---
 
-## Навигация
+## Navigation
 
-### Схема переходов
+### Flow Diagram
 
 ```
 login <-> register
@@ -319,26 +340,26 @@ contact-list ──┬── add-contact
          └── (back) → contact-list
 ```
 
-### Горячие клавиши
+### Keyboard Shortcuts
 
-| Экран | Клавиша | Действие |
-|-------|---------|----------|
-| Все | Esc | Назад / Отмена |
-| Все | Ctrl+C | Выход |
-| List | Enter | Выбрать элемент |
-| List | + | Добавить контакт |
-| List | - | Удалить контакт |
-| Chat | Enter | Отправить |
+| Screen | Key | Action |
+|--------|-----|--------|
+| All | Esc | Back / Cancel |
+| All | Ctrl+C | Exit |
+| List | Enter | Select item |
+| List | + | Add contact |
+| List | - | Delete contact |
+| Chat | Enter | Send |
 | Delete | Space | Toggle checkbox |
 
 ---
 
-## Конфигурация
+## Configuration
 
 ```
 ~/.foxgram/
 ├── config.json    # serverUrl, userId, username, publicKey, secretKey, token
-└── contacts.json  # массив контактов
+└── contacts.json  # array of contacts
 ```
 
 **config.json:**
@@ -353,66 +374,82 @@ contact-list ──┬── add-contact
 }
 ```
 
+**Note:** serverUrl is read from config.json and passed to Foxgram during initialization.
+
 ---
 
-## Команды CLI
+## CLI Commands
 
 ```bash
-foxgram login          # открыть экран входа
-foxgram register       # открыть экран регистрации
-foxgram chat <username> # открыть чат с пользователем (если есть в контактах)
-foxgram logout         # выйти и очистить локальные данные
+foxgram login          # open login screen
+foxgram register       # open registration screen
+foxgram chat <username> # open chat with user (if in contacts)
+foxgram logout         # logout and clear local data
 ```
 
 ---
 
-## Зависимости
+## Dependencies
 
 ```json
 {
   "name": "foxgram-cli",
   "version": "1.0.0",
   "bin": {
-    "foxgram": "./src/index.js"
+    "foxgram": "./dist/index.js"
   },
   "dependencies": {
     "foxgram-core": "1.0.0",
-    "ink": "^4.0.0",         // или blessed
-    "react": "^18.0.0",      // для ink
-    "yargs": "^17.0.0",
-    "meow": "^11.0.0"
+    "ink": "^4.0.0",
+    "react": "^18.0.0",
+    "yargs": "^17.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/react": "^18.0.0",
+    "@types/node": "^20.0.0"
   }
 }
 ```
 
 ---
 
-## Запуск
+## Building
 
 ```bash
-cd packages/cli
-npm install
-foxgram login
-# или
-node src/index.js login
+npm run build
+# Compiles TypeScript to dist/
 ```
 
 ---
 
-## Обработка ошибок
+## Running
 
-- Ошибка сети — показать сообщение, retry через 5 секунд
-- Ошибка API — показать сообщение об ошибки
-- Invalid token — logout, возврат на экран входа
-- Invalid key format — показать валидационное сообщение
+```bash
+cd packages/cli
+npm install
+npm run build
+foxgram login
+# or
+node dist/index.js login
+```
 
 ---
 
-## TODO (будущие фичи)
+## Error Handling
 
-- [ ] Сохранение serverUrl в config
-- [ ] Редактирование serverUrl через UI
-- [ ] История сообщений в файле
+- Network error — show message, retry after 5 seconds
+- API error — show error message
+- Invalid token — logout, return to login screen
+- Invalid key format — show validation message
+
+---
+
+## Future Features (TODO)
+
+- [ ] Save serverUrl in config
+- [ ] Edit serverUrl through UI
+- [ ] Message history in file
 - [ ] Desktop notifications
-- [ ] Индикация "печатает..."
-- [ ] Статус "онлайн/оффлайн"
+- [ ] "Typing..." indicator
+- [ ] Online/offline status
