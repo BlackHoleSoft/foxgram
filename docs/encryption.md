@@ -58,25 +58,21 @@ ciphertext = XChaCha20-Poly1305(key=sharedSecret, nonce=nonce, plaintext)
 ### foxgram-core crypto module
 
 ```typescript
-interface EncryptedMessage {
-  encryptedContent: string;  // base64url, nonce + ciphertext
-  nonce: string;             // base64url, 24 bytes
-}
-
 // Encrypt
-const { encryptedContent, nonce } = encryptMessage({
+const { encryptedContent } = encryptMessage({
   message: 'Hello!',
   mySecretKey: 'base64url...',
   theirPublicKey: 'base64url...'
 });
+// Returns: encryptedContent — base64url(nonce || ciphertext)
 
 // Decrypt
 const plaintext = decryptMessage({
-  encryptedContent: 'base64url...',
-  nonce: 'base64url...',
+  encryptedContent: 'base64url...', // contains nonce || ciphertext
   mySecretKey: 'base64url...',
   theirPublicKey: 'base64url...'
 });
+// Returns: 'Hello!'
 ```
 
 ### Storage Format
@@ -107,15 +103,7 @@ This eliminates the need to store nonce separately in the database.
 
 ## Fallback
 
-If libsodium is unavailable (e.g., browser without WebAssembly support), TweetNaCl.js is used as fallback.
-
-```typescript
-// Automatic fallback in foxgram-core
-import sodium from 'libsodium-wrappers';
-if (!sodium) {
-  // Use tweetnacl
-}
-```
+If libsodium is unavailable, the SDK will throw an error.
 
 ---
 
@@ -123,7 +111,6 @@ if (!sodium) {
 
 ```json
 {
-  "libsodium-wrappers": "^0.7.0",
-  "tweetnacl": "^1.0.3"
+  "libsodium-wrappers": "^0.7.0"
 }
 ```

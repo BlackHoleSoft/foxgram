@@ -17,7 +17,7 @@ Foxgram — self-hosted мессенджер со сквозным (end-to-end) 
 | Компонент | Описание | Документация |
 |-----------|----------|--------------|
 | `packages/backend` | Express сервер, аутентификация, хранение сообщений | [docs/backend.md](docs/backend.md) |
-| `packages/foxgram-core` | JavaScript SDK, криптография, работа с API | [docs/foxgram-core.md](docs/foxgram-core.md) |
+| `packages/foxgram-core` | TypeScript SDK, криптография, работа с API | [docs/foxgram-core.md](docs/foxgram-core.md) |
 | `packages/cli` | TUI клиент, терминальный интерфейс | [docs/cli.md](docs/cli.md) |
 
 ---
@@ -47,9 +47,9 @@ Foxgram — self-hosted мессенджер со сквозным (end-to-end) 
 
 | Компонент | Технологии |
 |-----------|------------|
-| Backend | Node.js 20+, Express, better-sqlite3 |
-| Core SDK | Node.js 18+, libsodium-wrappers (fallback to TweetNaCl.js) |
-| CLI Client | Node.js 18+, Ink / Blessed, foxgram-core |
+| Backend | Node.js 20+, Express, TypeScript, better-sqlite3, argon2 |
+| Core SDK | Node.js 18+, TypeScript, libsodium-wrappers |
+| CLI Client | Node.js 18+, TypeScript, Ink / Blessed, foxgram-core |
 | Шифрование | X25519, XChaCha20-Poly1305 |
 
 ---
@@ -124,9 +124,10 @@ foxgram chat <username>
 - PR для любых изменений
 
 ### Код
+- TypeScript по всему проекту
 - 2 пробела для отступов
 - JSDoc для документации функций
-- комментарии, не очень много, но достаточно для понимания программисту, не погруженному в проект
+- комментируй код
 
 ### Безопасность
 - Никогда не логировать секретные ключи

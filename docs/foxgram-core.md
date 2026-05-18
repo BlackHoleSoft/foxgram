@@ -11,8 +11,7 @@ TypeScript SDK for working with Foxgram API. Used by the CLI client for all oper
 **Requirements:**
 - Node.js 18+
 - TypeScript
-- Pure JavaScript (no native modules) for portability
-- Fallback to TweetNaCl.js if libsodium unavailable
+- libsodium-wrappers
 
 ---
 
@@ -361,8 +360,7 @@ async function main() {
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "libsodium-wrappers": "^0.7.0",
-    "tweetnacl": "^1.0.3"
+    "libsodium-wrappers": "^0.7.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
@@ -371,7 +369,7 @@ async function main() {
 }
 ```
 
-**Fallback:** If libsodium-wrappers is not available (e.g., browser without WebAssembly), TweetNaCl.js is used.
+**Fallback:** Not used. libsodium-wrappers is required.
 
 ---
 
