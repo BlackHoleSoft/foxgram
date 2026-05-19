@@ -1,13 +1,13 @@
 import sodium from 'libsodium-wrappers';
 
 /**
- * Минимальная длина base64url строки для 32-байтового ключа.
+ * Длина base64url строки для 32-байтового ключа.
  * 32 байта = 43 символа base64url (округление вверх до кратного 4).
  */
-const EXPECTED_KEY_LENGTH = 44;
+const EXPECTED_KEY_LENGTH = 43;
 
 /**
- * Шабон для валидации base64url (без padding).
+ * Шаблон для валидации base64url (без padding).
  */
 const BASE64URL_REGEX = /^[A-Za-z0-9_-]+$/;
 
@@ -54,9 +54,13 @@ export async function generateKeyPair(): Promise<{ publicKey: string; secretKey:
 
   const keyPair = sodium.crypto_box_keypair();
 
+  // Конвертируем Uint8Array в base64url строки
+  const publicKey = Buffer.from(keyPair.publicKey).toString('base64url');
+  const secretKey = Buffer.from(keyPair.privateKey).toString('base64url');
+
   return {
-    publicKey: keyPair.publicKey,
-    secretKey: keyPair.privateKey,
+    publicKey,
+    secretKey,
   };
 }
 
@@ -71,9 +75,14 @@ export async function getPublicKey(secretKey: string): Promise<string> {
 
   validateKey(secretKey, 'secretKey');
 
-  const publicKey = sodium.crypto_box_publickey_from_secretkey(secretKey);
+  // Декодируем секретный ключ из base64url
+  const secretKeyBytes = Buffer.from(secretKey, 'base64url');
 
-  return publicKey;
+  // Вычисляем публичный ключ через X25519 base operation
+  const publicKeyBytes = sodium.crypto_scalarmult_base(secretKeyBytes);
+
+  // Конвертируем в base64url строку
+  return Buffer.from(publicKeyBytes).toString('base64url');
 }
 
 /**
@@ -82,15 +91,13 @@ export async function getPublicKey(secretKey: string): Promise<string> {
  * Используется для передачи ключа в криптографические операции libsodium.
  *
  * @param secretKey — секретный ключ в base64url (32 байта)
- * @returns объект sodium/crypto_box_secretkey
+ * @returns Uint8Array с байтами секретного ключа
  */
-export async function importSecretKey(secretKey: string): Promise<any> {
+export async function importSecretKey(secretKey: string): Promise<Uint8Array> {
   await ensureSodium();
 
   validateKey(secretKey, 'secretKey');
 
-  // libsodium принимает ключ как Uint8Array
-  const keyBytes = sodium.fromBase64(secretKey, sodium.base64_variants.ORIGINAL);
-
-  return keyBytes;
+  // Декодируем секретный ключ из base64url в Uint8Array
+  return Buffer.from(secretKey, 'base64url');
 }

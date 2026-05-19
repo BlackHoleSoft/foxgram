@@ -7,6 +7,11 @@ import { importSecretKey } from './keypair';
 const NONCE_LENGTH = 24;
 
 /**
+ * Максимальная длина сообщения в символах.
+ */
+const MAX_MESSAGE_LENGTH = 1_000_000;
+
+/**
  * Параметры для encryptMessage.
  */
 export interface EncryptMessageParams {
@@ -65,15 +70,25 @@ function generateNonce(length: number): Uint8Array {
 export async function encryptMessage(params: EncryptMessageParams): Promise<EncryptedMessage> {
   const { message, mySecretKey, theirPublicKey } = params;
 
-  // Валидация входных данных
+  // Валидация message
   if (typeof message !== 'string') {
     throw new Error('message: expected a string');
   }
 
+  if (message.length === 0) {
+    throw new Error('message: cannot be empty');
+  }
+
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    throw new Error(`message: too long (max ${MAX_MESSAGE_LENGTH} chars)`);
+  }
+
+  // Валидация mySecretKey
   if (typeof mySecretKey !== 'string') {
     throw new Error('mySecretKey: expected a string');
   }
 
+  // Валидация theirPublicKey
   if (typeof theirPublicKey !== 'string') {
     throw new Error('theirPublicKey: expected a string');
   }
@@ -81,30 +96,35 @@ export async function encryptMessage(params: EncryptMessageParams): Promise<Encr
   // Импортируем секретный ключ во внутренний формат libsodium
   const secretKeyBytes = await importSecretKey(mySecretKey);
 
-  // Валидируем публичный ключ получателя (должен быть 32 байта)
-  const theirPubKeyBytes = sodium.fromBase64(theirPublicKey, sodium.base64_variants.ORIGINAL);
+  // Декодируем публичный ключ получателя из base64url
+  let theirPubKeyBytes: Uint8Array;
+  try {
+    theirPubKeyBytes = Buffer.from(theirPublicKey, 'base64url');
+  } catch {
+    throw new Error('theirPublicKey: invalid base64url format');
+  }
+
   if (theirPubKeyBytes.length !== 32) {
     throw new Error('theirPublicKey: invalid length, expected 32 bytes');
   }
 
-  // Вычисляем shared secret через X25519
-  const sharedSecret = sodium.crypto_kx_client_session_keys(secretKeyBytes, theirPubKeyBytes);
+  // Вычисляем shared secret через X25519 DH (crypto_scalarmult)
+  const sharedSecret = sodium.crypto_scalarmult(secretKeyBytes, theirPubKeyBytes);
 
   // Генерируем случайный nonce (24 байта) и конвертируем в base64url строку
   const nonceBytes = generateNonce(NONCE_LENGTH);
-  const nonce = sodium.toBase64(nonceBytes, sodium.base64_variants.ORIGINAL);
+  const nonce = Buffer.from(nonceBytes).toString('base64url');
 
   // Шифруем сообщение с помощью XChaCha20-Poly1305
-  const plaintextBytes = sodium.fromUtf8(message);
-  const ciphertext = sodium.crypto_secretbox_xchacha20poly1305(plaintextBytes, nonce, sharedSecret.box);
+  const plaintextBytes = Buffer.from(message, 'utf8');
+  const ciphertext = sodium.crypto_secretbox_easy(plaintextBytes, nonceBytes, sharedSecret);
 
   // Concatenates nonce || ciphertext
-  const nonceRaw = sodium.fromBase64(nonce, sodium.base64_variants.ORIGINAL);
-  const combined = new Uint8Array(nonceRaw.length + ciphertext.length);
-  combined.set(nonceRaw);
-  combined.set(ciphertext, nonceRaw.length);
+  const combined = new Uint8Array(nonceBytes.length + ciphertext.length);
+  combined.set(nonceBytes);
+  combined.set(ciphertext, nonceBytes.length);
 
-  const encryptedContent = sodium.toBase64(combined, sodium.base64_variants.ORIGINAL);
+  const encryptedContent = Buffer.from(combined).toString('base64url');
 
   return {
     encryptedContent,
@@ -139,8 +159,13 @@ export async function decryptMessage(params: DecryptMessageParams): Promise<stri
     throw new Error('theirPublicKey: expected a string');
   }
 
-  // Декодируем encryptedContent
-  const combinedBytes = sodium.fromBase64(encryptedContent, sodium.base64_variants.ORIGINAL);
+  // Декодируем encryptedContent из base64url
+  let combinedBytes: Uint8Array;
+  try {
+    combinedBytes = Buffer.from(encryptedContent, 'base64url');
+  } catch {
+    throw new Error('encryptedContent: invalid base64url format');
+  }
 
   if (combinedBytes.length < NONCE_LENGTH) {
     throw new Error('encryptedContent: too short, missing nonce');
@@ -148,27 +173,38 @@ export async function decryptMessage(params: DecryptMessageParams): Promise<stri
 
   // Извлекаем nonce (первые 24 байта) и ciphertext
   const nonceRaw = combinedBytes.slice(0, NONCE_LENGTH);
-  const nonce = sodium.toBase64(nonceRaw, sodium.base64_variants.ORIGINAL);
+  const nonce = Buffer.from(nonceRaw).toString('base64url');
   const ciphertext = combinedBytes.slice(NONCE_LENGTH);
 
   // Импортируем секретный ключ
   const secretKeyBytes = await importSecretKey(mySecretKey);
 
-  // Валидируем публичный ключ отправителя
-  const theirPubKeyBytes = sodium.fromBase64(theirPublicKey, sodium.base64_variants.ORIGINAL);
+  // Декодируем публичный ключ отправителя из base64url
+  let theirPubKeyBytes: Uint8Array;
+  try {
+    theirPubKeyBytes = Buffer.from(theirPublicKey, 'base64url');
+  } catch {
+    throw new Error('theirPublicKey: invalid base64url format');
+  }
+
   if (theirPubKeyBytes.length !== 32) {
     throw new Error('theirPublicKey: invalid length, expected 32 bytes');
   }
 
-  // Вычисляем shared secret
-  const sharedSecret = sodium.crypto_kx_client_session_keys(secretKeyBytes, theirPubKeyBytes);
+  // Вычисляем shared secret через X25519 DH (crypto_scalarmult)
+  const sharedSecret = sodium.crypto_scalarmult(secretKeyBytes, theirPubKeyBytes);
 
   // Дешифруем
-  const plaintextBytes = sodium.crypto_secretbox_xchacha20poly1305_open(ciphertext, nonce, sharedSecret.box);
-
-  if (!plaintextBytes) {
+  let plaintextBytes: Uint8Array | false;
+  try {
+    plaintextBytes = sodium.crypto_secretbox_open_easy(ciphertext, nonceRaw, sharedSecret);
+  } catch {
     throw new Error('decryptMessage: decryption failed, integrity check failed');
   }
 
-  return sodium.toUtf8(plaintextBytes);
+  if (plaintextBytes === false) {
+    throw new Error('decryptMessage: decryption failed, integrity check failed');
+  }
+
+  return Buffer.from(plaintextBytes).toString('utf8');
 }
