@@ -1,7 +1,12 @@
-// Configuration
+// Configuration (local storage format — config.json)
 export interface FoxgramConfig {
   serverUrl: string;
   homeDir?: string;
+  userId?: string;
+  username?: string;
+  publicKey?: string;
+  secretKey?: string;
+  token?: string;
 }
 
 // Key pair
