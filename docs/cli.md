@@ -356,8 +356,12 @@ contact-list ──┬── add-contact
 
 ## Configuration
 
+Путь к директории данных определяется приоритетом:
+1. Env-переменная `FOXGRAM_HOME` — если задана, используется как абсолютный путь
+2. Текущая рабочая директория CLI — fallback, данные хранятся в `./foxgram/` (относительно cwd)
+
 ```
-~/.foxgram/
+<foxgram_home>/
 ├── config.json    # serverUrl, userId, username, publicKey, secretKey, token
 └── contacts.json  # array of contacts
 ```

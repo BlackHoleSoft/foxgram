@@ -65,8 +65,12 @@ Foxgram — self-hosted мессенджер со сквозным (end-to-end) 
 
 ## Локальное хранилище CLI
 
+Путь определяется приоритетом:
+1. Env-переменная `FOXGRAM_HOME` — абсолютный путь
+2. Fallback — `./foxgram/` (относительно cwd CLI)
+
 ```
-~/.foxgram/
+<foxgram_home>/
 ├── config.json    # serverUrl, userId, username, publicKey, secretKey, token
 └── contacts.json  # массив контактов
 ```

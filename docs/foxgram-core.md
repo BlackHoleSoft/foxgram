@@ -202,8 +202,12 @@ try {
 
 ### File Locations
 
+Путь к директории данных определяется приоритетом:
+1. Env-переменная `FOXGRAM_HOME` — если задана, используется как абсолютный путь
+2. Текущая рабочая директория CLI — fallback, данные хранятся в `./foxgram/` (относительно cwd)
+
 ```
-~/.foxgram/
+<foxgram_home>/
 ├── config.json    # serverUrl, userId, username, publicKey, secretKey, token
 └── contacts.json  # array of contacts
 ```
@@ -214,7 +218,8 @@ try {
 import { Storage } from './storage';
 
 // Initialize storage
-const storage = new Storage({ homeDir: '~/.foxgram' });
+const storage = new Storage();
+// dataDir определяется из FOXGRAM_HOME || ./foxgram/
 
 // Save configuration
 await storage.saveConfig({
