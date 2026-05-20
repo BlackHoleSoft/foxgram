@@ -34,7 +34,6 @@ export interface StoredMessage {
 export interface DecryptedMessage {
   id: string;
   senderId: string;
-  senderUsername: string;
   content: string;  // plaintext
   timestamp: number;
   isOutgoing: boolean;

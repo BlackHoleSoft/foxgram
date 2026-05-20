@@ -234,7 +234,6 @@ export class Foxgram {
     return {
       id: message.id,
       senderId: message.senderId,
-      senderUsername: '', // Будет заполнено из контактов
       content,
       timestamp: message.timestamp,
       isOutgoing,
