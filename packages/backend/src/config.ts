@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import path from 'path';
 
 // Загружаем .env файл
 dotenv.config();
@@ -18,7 +19,7 @@ export interface ServerConfig {
  */
 export function loadConfig(): ServerConfig {
   const port = parseInt(process.env.PORT || '3000', 10);
-  const dbPath = process.env.DB_PATH || './data/foxgram.db';
+  const dbPath = process.env.DB_PATH ? path.resolve(process.env.DB_PATH) : path.resolve('./data/foxgram.db');
   const jwtSecret = process.env.JWT_SECRET;
   const logLevel = process.env.LOG_LEVEL || 'debug';
 

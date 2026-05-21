@@ -2,6 +2,7 @@ import express from 'express';
 import { loadConfig } from './config';
 import { logger } from './logger';
 import { DatabaseManager } from './db';
+import { authMiddleware } from './middleware/auth';
 
 // Загружаем конфигурацию
 const config = loadConfig();
@@ -17,6 +18,11 @@ const app = express();
 
 // Middleware для парсинга JSON
 app.use(express.json());
+
+// Protected route — проверка middleware
+app.get('/api/status', authMiddleware, (req: express.Request, res: express.Response) => {
+  res.json({ status: 'ok', userId: req.userId });
+});
 
 // Запускаем сервер
 const server = app.listen(config.port, () => {
