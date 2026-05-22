@@ -1,8 +1,4 @@
-import dotenv from 'dotenv';
 import path from 'path';
-
-// Загружаем .env файл
-dotenv.config();
 
 export interface ServerConfig {
   port: number;

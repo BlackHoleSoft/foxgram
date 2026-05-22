@@ -1,10 +1,6 @@
 import Database from 'better-sqlite3';
-import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
-
-// Загружаем .env первым — до создания singleton
-dotenv.config();
 
 // Загружаем SQL schema из файла
 const schemaPath = path.join(__dirname, 'schema.sql');

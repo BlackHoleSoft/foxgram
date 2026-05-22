@@ -59,7 +59,7 @@ authRouter.post('/register', async (req: Request, res: Response): Promise<void> 
   }
 
   // Хэшировать пароль
-  const passwordHash = argon2.hashSync(password);
+  const passwordHash = await argon2.hash(password);
 
   // Сгенерировать UUID для userId
   const userId = uuidv4();
