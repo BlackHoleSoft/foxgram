@@ -32,7 +32,7 @@ authRouter.post('/register', async (req: Request, res: Response): Promise<void> 
   }
 
   // Валидация publicKey: base64url, 32 bytes
-  if (!publicKey || typeof publicKey !== 'string' || publicKey.length === 0) {
+  if (!publicKey || typeof publicKey !== 'string') {
     res.status(400).json({ error: 'Invalid public key format' });
     return;
   }

@@ -1,18 +1,24 @@
 import express from 'express';
 import { loadConfig } from './config';
+import { dbManager } from './db';
 import { logger } from './logger';
-import { DatabaseManager } from './db';
 import { authMiddleware } from './middleware/auth';
 import { authRouter } from './routes/auth';
+import { messagesRouter } from './routes/messages';
+import fs from 'fs';
+import path from 'path';
 
 // Загружаем конфигурацию
 const config = loadConfig();
 
-// Инициализируем базу данных
-const dbManager = new DatabaseManager(config.dbPath);
+// Инициализируем базу данных (singleton из db/index.ts)
 dbManager.init();
 
 logger.info(`Database initialized at ${config.dbPath}`);
+
+// Создаём директорию для сообщений (если не существует)
+const messagesDir = path.resolve('./data/messages');
+fs.mkdirSync(messagesDir, { recursive: true });
 
 // Создаём Express приложение
 const app = express();
@@ -22,6 +28,9 @@ app.use(express.json());
 
 // Регистрация роутов аутентификации
 app.use('/api/auth', authRouter);
+
+// Protected роуты — сообщения
+app.use('/api/messages', authMiddleware, messagesRouter);
 
 // Protected route — проверка middleware
 app.get('/api/status', authMiddleware, (req: express.Request, res: express.Response) => {
