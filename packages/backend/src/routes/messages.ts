@@ -120,10 +120,10 @@ messagesRouter.get('/poll', async (req: Request, res: Response): Promise<void> =
        ORDER BY created_at`
     ).all(req.userId, userId, userId, req.userId) as Array<{ id: string; sender_id: string; recipient_id: string; created_at: number }>;
   } else {
-    // Все сообщения для текущего пользователя
+    // Все сообщения для текущего пользователя (входящие и исходящие)
     messages = db.prepare(
-      'SELECT id, sender_id, recipient_id, created_at FROM messages WHERE recipient_id = ? ORDER BY created_at'
-    ).all(req.userId) as Array<{ id: string; sender_id: string; recipient_id: string; created_at: number }>;
+      'SELECT id, sender_id, recipient_id, created_at FROM messages WHERE sender_id = ? OR recipient_id = ? ORDER BY created_at'
+    ).all(req.userId, req.userId) as Array<{ id: string; sender_id: string; recipient_id: string; created_at: number }>;
   }
 
   // Для каждого сообщения прочитать encryptedContent из файла

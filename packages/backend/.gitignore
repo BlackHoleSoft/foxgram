@@ -1,0 +1,14 @@
+# Environment
+.env
+
+# Database
+*.db
+
+# Message storage
+data/messages/*.bin
+
+# Build
+dist/
+
+# Node
+node_modules/

@@ -1,45 +1,18 @@
-import express from 'express';
-import dotenv from 'dotenv';
+/**
+ * Точка входа — запускает сервер.
+ *
+ * Для тестов используйте import { app } from './app';
+ * и запускайте сервер вручную в beforeAll.
+ */
+
+import { app } from './app';
 import { loadConfig } from './config';
-import { dbManager } from './db';
 import { logger } from './logger';
-import { authMiddleware } from './middleware/auth';
-import { authRouter } from './routes/auth';
-import { messagesRouter } from './routes/messages';
-import { usersRouter } from './routes/users';
 
-dotenv.config();
-
-// Загружаем конфигурацию
 const config = loadConfig();
 
-// Инициализируем базу данных (singleton из db/index.ts)
-dbManager.init();
-
-logger.info(`Database initialized at ${config.dbPath}`);
-
-// Создаём Express приложение
-const app = express();
-
-// Middleware для парсинга JSON
-app.use(express.json());
-
-// Регистрация роутов аутентификации
-app.use('/api/auth', authRouter);
-
-// Protected роуты — сообщения
-app.use('/api/messages', authMiddleware, messagesRouter);
-
-// Публичный роутер — пользователи
-app.use('/api/users', usersRouter);
-
-// Protected route — проверка middleware
-app.get('/api/status', authMiddleware, (req: express.Request, res: express.Response) => {
-  res.json({ status: 'ok', userId: req.userId });
-});
-
 // Запускаем сервер
-const server = app.listen(config.port, () => {
+export const server = app.listen(config.port, () => {
   logger.info(`Server running on port ${config.port}`);
 });
 
@@ -49,6 +22,8 @@ const server = app.listen(config.port, () => {
 function gracefulShutdown(): void {
   logger.info('Shutting down...');
   server.close(() => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { dbManager } = require('./db');
     dbManager.close();
     logger.info('Database closed. Server stopped.');
     process.exit(0);
