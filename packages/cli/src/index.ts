@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Foxgram CLI — entry point.
+ * Foxgram CLI — точка входа.
  *
  * Команды:
  *   foxgram login          — открыть экран входа
@@ -10,18 +10,23 @@
  *   foxgram logout         — выйти и очистить локальные данные
  */
 
-import { loadCliConfig } from './config';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
+import { login } from './screens/login';
+import { register } from './screens/register';
+import { chat } from './screens/chat';
+import { logout } from './screens/logout';
 
-const config = loadCliConfig();
-
-console.log('Foxgram CLI v1.0.0');
-console.log(`Server: ${config.serverUrl}`);
-console.log(`Home:   ${config.homeDir}`);
-console.log('');
-console.log('Usage: foxgram <command>');
-console.log('');
-console.log('Commands:');
-console.log('  login          Open login screen');
-console.log('  register       Open registration screen');
-console.log('  chat <username> Open chat with user');
-console.log('  logout         Logout and clear local data');
+yargs(hideBin(process.argv))
+  .command('login', 'Open login screen', {}, login)
+  .command('register', 'Open registration screen', {}, register)
+  .command(
+    'chat <username>',
+    'Open chat with user',
+    ((arg: any) => arg.positional('username', { type: 'string', demandOption: true })) as any,
+    ((args: { username: string }) => chat(args)) as any
+  )
+  .command('logout', 'Logout and clear local data', {}, logout)
+  .demandCommand(1, 'You need to specify a command')
+  .help()
+  .parse();
