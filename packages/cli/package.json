@@ -1,0 +1,19 @@
+{
+  "name": "foxgram-cli",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "bin": { "foxgram": "./dist/index.js" },
+  "scripts": {
+    "build": "tsc",
+    "start": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "foxgram-core": "file:../foxgram-core",
+    "chalk": "^4.1.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0"
+  }
+}
