@@ -1,14 +1,16 @@
-# CLI — Foxgram TUI Client
+# CLI — Foxgram Terminal Client
 
 ## Overview
 
-Minimalist terminal (TUI) client for Foxgram. Uses Ink (React-like) or Blessed for interface building.
+Simple terminal client for Foxgram. Plain text output with ANSI colors, no TUI framework.
+Primary purpose: manual testing and debugging of the foxgram-core SDK.
 
 **Requirements:**
 - Node.js 18+
 - TypeScript
 - foxgram-core SDK
-- Ink or Blessed
+- chalk (colors)
+- readline (built-in Node.js)
 
 ---
 
@@ -18,244 +20,216 @@ Minimalist terminal (TUI) client for Foxgram. Uses Ink (React-like) or Blessed f
 packages/cli/
 ├── package.json
 ├── tsconfig.json
-├── src/
-│   ├── index.ts              # entry point, CLI arguments parsing
-│   ├── cli.ts               # yargs or similar
-│   ├── app.ts               # main TUI component
-│   ├── state.ts             # state management (MobX/Redux/simple)
-│   ├── screens/
-│   │   ├── login.ts         # login screen
-│   │   ├── register.ts      # registration screen
-│   │   ├── contact-list.ts  # contacts list
-│   │   ├── add-contact.ts   # add contact
-│   │   ├── delete-contacts.ts # delete contacts
-│   │   └── chat.ts          # chat window
-│   └── components/          # reusable components
-│       ├── input.ts         # text input
-│       ├── button.ts        # button
-│       ├── list.ts          # selectable list
-│       └── checkbox.ts      # checkbox (for deletion)
-└── README.md
+└── src/
+    ├── index.ts         # entry point, starts the app
+    ├── state.ts         # app state (current user, contacts, etc.)
+    ├── renderer.ts      # print helpers (headers, menus, errors)
+    ├── prompt.ts        # readline wrappers (ask, choose, password)
+    └── screens/
+        ├── login.ts
+        ├── register.ts
+        ├── contact-list.ts
+        ├── add-contact.ts
+        ├── delete-contacts.ts
+        └── chat.ts
 ```
+
+---
+
+## Interaction Model
+
+- Each screen prints its content to stdout and reads input from stdin via readline
+- Navigation: user types a number to select an option, then presses Enter
+- `0` or empty input always means "back" / "cancel" where applicable
+- `Ctrl+C` exits at any point
+- Screen transition: clear the terminal (`console.clear()`), print the new screen
 
 ---
 
 ## Screens
 
+### Startup Flow
+
+```
+Always → go to auth-menu
+```
+
+> Note: foxgram-core does not support restoring a session from a saved token.
+> `Foxgram.login()` loads the saved secretKey from config.json, so the user only needs to type username+password on each startup.
+> First run requires `Register` (to save secretKey); after that `Login` works.
+
+---
+
+### Auth Menu (not logged in)
+
+```
+╔══════════════════════════╗
+║         FOXGRAM          ║
+╚══════════════════════════╝
+Server: http://localhost:3000
+
+  1. Login
+  2. Register
+
+> _
+```
+
+---
+
 ### 1. Login
 
 ```
-┌─────────────────────────────────┐
-│           FOXGRAM               │
-│                                 │
-│  Username: [____________]       │
-│                                 │
-│  Password: [____________]       │
-│                                 │
-│        [ Login ]                │
-│                                 │
-│   No account? [Register]        │
-│                                 │
-│  Server: http://localhost:3000  │
-└─────────────────────────────────┘
+── Login ──────────────────
+
+Username: _
+Password: _
+
+Logging in...
+✓ Welcome, alice!
 ```
 
-**Fields:**
-- Username (required)
-- Password (required)
-- "Login" button
-- Link to Register
-- Display serverUrl
-
-**Actions:**
-- Enter — submit
-- Tab — next field
-- Register — go to registration screen
+- Prompts for username, then password (hidden)
+- On success: saves token+user to config.json, navigates to contact-list
+- On error: prints error in red, returns to auth menu
 
 ---
 
 ### 2. Register
 
 ```
-┌─────────────────────────────────┐
-│           FOXGRAM               │
-│         Register                │
-│                                 │
-│  Username: [____________]       │
-│                                 │
-│  Password: [____________]       │
-│                                 │
-│  Private Key (optional):        │
-│  [________________________________] │
-│                                 │
-│  [ Generate new key ]           │
-│                                 │
-│        [ Register ]             │
-│                                 │
-│   Have account? [Login]        │
-└─────────────────────────────────┘
+── Register ────────────────
+
+Username: _
+Password (min 8 chars): _
+Private key (optional, base64url 32 bytes): _
+  [leave empty to generate automatically]
+
+Registering...
+✓ Registered as alice. Public key: <base64url>
 ```
 
-**Fields:**
-- Username (required)
-- Password (min 8 chars)
-- Private Key (optional) — base64url, 32 bytes
-
-**Actions:**
-- "Generate new key" — generates new pair on client, fills field with secretKey
-- If Private Key is empty — pair generated automatically by foxgram-core
-- Client computes publicKey from secretKey and sends to server
+- If private key is empty — foxgram-core generates a new key pair
+- On success: saves credentials to config.json, navigates to contact-list
+- On error: prints error in red, returns to auth menu
 
 ---
 
-### 3. Contact List (main screen)
+### 3. Contact List (main screen, logged in)
 
 ```
-┌─────────────────────────────────┐
-│  FOXGRAM — alice           [⚙] │
-├─────────────────────────────────┤
-│                                 │
-│  Contacts                       │
-│                                 │
-│  ┌─────────────────────────┐    │
-│  │ ○ bob                   │    │
-│  │ ○ charlie               │    │
-│  │ ○ dave                  │    │
-│  └─────────────────────────┘    │
-│                                 │
-│  [ Chat ]  [ + Add ]  [ ✕ Del ]│
-│                                 │
-│         [ Logout ]              │
-└─────────────────────────────────┘
+╔══════════════════════════╗
+║  FOXGRAM — alice         ║
+╚══════════════════════════╝
+
+Contacts:
+  1. bob
+  2. charlie
+  3. dave
+
+  a. Add contact
+  d. Delete contacts
+  l. Logout
+  0. Exit
+
+> _
 ```
 
-**Elements:**
-- Header with username and settings icon
-- Contacts list (radio buttons)
-- Buttons: Chat, Add, Delete, Logout
-
-**Actions:**
-- Enter on contact — select
-- Chat — open selected contact
-- Add — go to add contact screen
-- Delete — go to delete contacts screen
-- Logout — exit, clear config
+- User types a number to open chat with that contact
+- `a` → add-contact screen
+- `d` → delete-contacts screen
+- `l` → logout (clear config.json, go to auth menu)
+- `0` → exit process
 
 ---
 
 ### 4. Add Contact
 
 ```
-┌─────────────────────────────────┐
-│  ← Back        Add Contact      │
-├─────────────────────────────────┤
-│                                 │
-│  Username: [____________]       │
-│                                 │
-│  Public Key:                    │
-│  [________________________________] │
-│                                 │
-│        [ Add Contact ]          │
-│                                 │
-└─────────────────────────────────┘
+── Add Contact ─────────────
+
+Username: _
+User ID (UUID): _
+Public key (base64url 32 bytes): _
+
+Adding...
+✓ Contact bob added.
+
+Press Enter to go back.
 ```
 
-**Fields:**
-- Username (required)
-- Public Key (required) — base64url, 32 bytes
-
-**Notes:**
-- Keys are exchanged manually (verbally, file, QR)
-- No server-side user search in MVP
-
-**Actions:**
-- Add Contact — validate and save to contacts.json
-- Back — return to contacts list
+- Username, userId, and publicKey are exchanged manually (out-of-band)
+- Validates that public key is valid base64url (32 bytes)
+- Saves to contacts.json
+- On error: prints error in red, re-prompts or returns
 
 ---
 
 ### 5. Delete Contacts
 
 ```
-┌─────────────────────────────────┐
-│  ← Back       Delete Contacts   │
-├─────────────────────────────────┤
-│                                 │
-│  Select contacts to delete:     │
-│                                 │
-│  [ ] bob                        │
-│  [✓] charlie                   │
-│  [ ] dave                       │
-│                                 │
-│       [ Delete Selected ]       │
-│                                 │
-└─────────────────────────────────┘
+── Delete Contacts ──────────
+
+Contacts:
+  1. bob
+  2. charlie
+  3. dave
+
+Enter numbers to delete (comma-separated), or 0 to cancel:
+> _
+
+Delete bob, charlie? (y/N): _
+
+✓ Deleted: bob, charlie.
+
+Press Enter to go back.
 ```
 
-**Elements:**
-- Contacts list with checkboxes
-- "Delete Selected" button
-
-**Actions:**
-- Space — toggle checkbox
-- Delete Selected — remove checked from contacts.json
-- Back — return to contacts list
+- User types comma-separated numbers
+- Confirmation prompt before deletion
+- Removes from contacts.json
 
 ---
 
 ### 6. Chat
 
 ```
-┌─────────────────────────────────┐
-│  ← Back           bob           │
-├─────────────────────────────────┤
-│                                 │
-│  [12:30] alice: Hello!          │
-│  [12:31] bob: Hi there!         │
-│  [12:32] alice: How are you?    │
-│                                 │
-│  [12:33] bob: Fine, thanks!     │
-│                                 │
-│                                 │
-├─────────────────────────────────┤
-│  [________________________________] │
-│                            [Send]│
-└─────────────────────────────────┘
+── Chat: bob ───────────────
+
+[12:30] alice: Hello!
+[12:31] bob:   Hi there!
+[12:32] alice: How are you?
+[12:33] bob:   Fine, thanks!
+
+──────────────────────────
+
+Message (or 0 to go back): _
 ```
 
-**Elements:**
-- Header with contact's username
-- Messages area (scrollable)
-- Input field + Send button
-
-**Message format:**
-- Outgoing: right-aligned, our username
-- Incoming: left-aligned, contact's username
-- Timestamp: [HH:MM]
-
-**Actions:**
-- Enter — send message
-- Arrows — scroll history
-- Back — return to contacts list
-- Auto-refresh every N seconds for current chat only
+- Outgoing messages printed in one color, incoming in another
+- After sending, re-renders the chat with the new message appended
+- Polls for new messages before each prompt (or on a short interval)
+- `0` → return to contact-list
 
 ---
 
 ## Application State (state.ts)
 
 ```typescript
-type Screen = 'login' | 'register' | 'contact-list' | 'add-contact' | 'delete-contacts' | 'chat';
+type Screen =
+  | 'auth-menu'
+  | 'login'
+  | 'register'
+  | 'contact-list'
+  | 'add-contact'
+  | 'delete-contacts'
+  | 'chat';
 
 interface AppState {
   screen: Screen;
-  isAuthenticated: boolean;
   user: User | null;
   contacts: Contact[];
   selectedContactId: string | null;
-  messages: Record<string, StoredMessage[]>;
   config: Config;
-  error: string | null;
-  isLoading: boolean;
 }
 
 interface User {
@@ -263,6 +237,7 @@ interface User {
   username: string;
   publicKey: string;
   secretKey: string;
+  token: string;
 }
 
 interface Contact {
@@ -271,94 +246,72 @@ interface Contact {
   publicKey: string;
 }
 
-interface StoredMessage {
-  id: string;
-  senderId: string;
-  encryptedContent: string;
-  timestamp: number;
-}
-
 interface Config {
   serverUrl: string;
 }
 ```
 
-**Methods:**
+---
+
+## Renderer Helpers (renderer.ts)
+
 ```typescript
-setScreen(screen: Screen): void
-setUser(user: User): void
-addContact(contact: Contact): void
-removeContact(userId: string): void
-setSelectedContact(userId: string | null): void
-addMessage(userId: string, message: StoredMessage): void
-setError(error: string): void
-clearError(): void
-logout(): void
+printHeader(title: string): void     // box with title
+printMenu(items: MenuItem[]): void   // numbered list
+printError(message: string): void    // red text
+printSuccess(message: string): void  // green text
+printMessage(msg: ChatMessage): void // [HH:MM] user: text
 ```
 
 ---
 
-## Polling (auto-refresh)
-
-After login, client polls messages only for the currently open chat:
+## Prompt Helpers (prompt.ts)
 
 ```typescript
-// Every 10 seconds (or configurable)
-async function pollMessages() {
-  if (!currentContactId) return;
-  
-  const { messages } = await api.getMessages(currentContactId);
-  
-  for (const msg of messages) {
-    if (!seenMessages.has(msg.id)) {
-      state.addMessage(currentContactId, msg);
-      seenMessages.add(msg.id);
-      // Show notification if not in this chat
-    }
-  }
-}
+ask(label: string): Promise<string>            // plain text input
+password(label: string): Promise<string>       // hidden input
+choose(label: string, max: number): Promise<number>  // numeric choice
+confirm(label: string): Promise<boolean>       // y/N
 ```
 
-Note: `GET /api/messages/poll` without `userId` is available on backend for future features (e.g., notifications badge).
+All built on Node.js `readline` — no external prompt libraries.
 
 ---
 
-## Navigation
+## Polling
 
-### Flow Diagram
+In the chat screen, poll for new messages before every prompt iteration:
 
-```
-login <-> register
-    │
-    ▼
-contact-list ──┬── add-contact
-    │          │
-    ├── delete-contacts
-    │
-    └── chat
-         │
-         └── (back) → contact-list
+```typescript
+const newMessages = await api.getMessages(contactId);
+// render new messages, then show the input prompt
 ```
 
-### Keyboard Shortcuts
+No background timers — polling happens synchronously in the chat loop.
 
-| Screen | Key | Action |
-|--------|-----|--------|
-| All | Esc | Back / Cancel |
-| All | Ctrl+C | Exit |
-| List | Enter | Select item |
-| List | + | Add contact |
-| List | - | Delete contact |
-| Chat | Enter | Send |
-| Delete | Space | Toggle checkbox |
+---
+
+## Navigation Flow
+
+```
+startup
+  ├── (no config) → auth-menu
+  │     ├── 1 → login → contact-list
+  │     └── 2 → register → contact-list
+  └── (config ok) → contact-list
+        ├── <number> → chat → contact-list
+        ├── a → add-contact → contact-list
+        ├── d → delete-contacts → contact-list
+        └── l → logout → auth-menu
+```
 
 ---
 
 ## Configuration
 
-Путь к директории данных определяется приоритетом:
-1. Env-переменная `FOXGRAM_HOME` — если задана, используется как абсолютный путь
-2. Текущая рабочая директория CLI — fallback, данные хранятся в `./foxgram/` (относительно cwd)
+Data directory priority:
+1. `FOXGRAM_HOME` env variable — used as absolute path if set
+2. Current working directory — data stored in `./foxgram/` (relative to cwd)
 
 ```
 <foxgram_home>/
@@ -378,19 +331,6 @@ contact-list ──┬── add-contact
 }
 ```
 
-**Note:** serverUrl is read from config.json and passed to Foxgram during initialization.
-
----
-
-## CLI Commands
-
-```bash
-foxgram login          # open login screen
-foxgram register       # open registration screen
-foxgram chat <username> # open chat with user (if in contacts)
-foxgram logout         # logout and clear local data
-```
-
 ---
 
 ## Dependencies
@@ -404,25 +344,13 @@ foxgram logout         # logout and clear local data
   },
   "dependencies": {
     "foxgram-core": "1.0.0",
-    "ink": "^4.0.0",
-    "react": "^18.0.0",
-    "yargs": "^17.0.0"
+    "chalk": "^5.0.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
-    "@types/react": "^18.0.0",
     "@types/node": "^20.0.0"
   }
 }
-```
-
----
-
-## Building
-
-```bash
-npm run build
-# Compiles TypeScript to dist/
 ```
 
 ---
@@ -433,27 +361,23 @@ npm run build
 cd packages/cli
 npm install
 npm run build
-foxgram login
-# or
-node dist/index.js login
+node dist/index.js
 ```
 
 ---
 
 ## Error Handling
 
-- Network error — show message, retry after 5 seconds
-- API error — show error message
-- Invalid token — logout, return to login screen
-- Invalid key format — show validation message
+- Network error — print error in red, prompt user to retry or go back
+- API error — print error message, stay on current screen
+- Invalid token — clear config.json, navigate to auth menu
+- Invalid key format — print validation error, re-prompt
 
 ---
 
 ## Future Features (TODO)
 
-- [ ] Save serverUrl in config
-- [ ] Edit serverUrl through UI
-- [ ] Message history in file
+- [ ] Edit serverUrl from UI
+- [ ] Message history saved to file
 - [ ] Desktop notifications
-- [ ] "Typing..." indicator
-- [ ] Online/offline status
+- [ ] Online/offline status indicator
