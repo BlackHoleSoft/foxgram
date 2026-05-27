@@ -3,6 +3,8 @@
 import { Foxgram } from 'foxgram-core';
 import { AppState, Screen } from './state';
 import { authMenu } from './screens/auth-menu';
+import { login } from './screens/login';
+import { register } from './screens/register';
 import { contactList } from './screens/contact-list';
 import { addContact } from './screens/add-contact';
 import { deleteContacts } from './screens/delete-contacts';
@@ -25,6 +27,12 @@ async function main(): Promise<void> {
     switch (screen) {
       case 'auth-menu':
         screen = await authMenu(state);
+        break;
+      case 'login':
+        screen = await login(state);
+        break;
+      case 'register':
+        screen = await register(state);
         break;
       case 'contact-list':
         screen = await contactList(state);

@@ -118,7 +118,9 @@ export class Foxgram {
     const savedConfig = await this.storage.loadConfig();
 
     if (!savedConfig?.secretKey) {
-      throw new Error('No saved secret key found. Please register first.');
+      const err = new Error('No saved secret key found. Please register first.');
+      (err as NodeJS.ErrnoException).code = 'NO_SECRET_KEY';
+      throw err;
     }
 
     // Вызываем API для входа
@@ -172,6 +174,15 @@ export class Foxgram {
    */
   getUsername(): string | null {
     return this.currentUser?.username ?? null;
+  }
+
+  /**
+   * Получает публичный ключ текущего пользователя.
+   *
+   * @returns publicKey (base64url) или null если не авторизован
+   */
+  getPublicKey(): string | null {
+    return this.currentUser?.publicKey ?? null;
   }
 
   // ==================== Messages ====================

@@ -5,6 +5,8 @@ import { Foxgram, Contact } from 'foxgram-core';
  */
 export type Screen =
   | 'auth-menu'
+  | 'login'
+  | 'register'
   | 'contact-list'
   | 'add-contact'
   | 'delete-contacts'
