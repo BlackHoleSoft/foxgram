@@ -5,6 +5,8 @@
  * и запускайте сервер вручную в beforeAll.
  */
 
+import 'dotenv/config';
+
 import { app } from './app';
 import { loadConfig } from './config';
 import { logger } from './logger';
