@@ -52,10 +52,18 @@ export function printSuccess(msg: string): void {
 }
 
 /**
- * Выводит пустую строку-разделитель.
+ * Выводит строку-разделитель.
+ *
+ * @param char — символ разделителя. Если не передан, выводит пустую строку.
+ *               Если передан — выводит линию из этого символа на всю ширину терминала.
  */
-export function printSeparator(): void {
-  console.log();
+export function printSeparator(char?: string): void {
+  if (char) {
+    const width = process.stdout.columns ?? 80;
+    console.log(char.repeat(width));
+  } else {
+    console.log();
+  }
 }
 
 /**
@@ -64,15 +72,22 @@ export function printSeparator(): void {
  * Формат: [HH:MM] username: content
  * Исходящие (msg.senderId === myUserId): chalk.cyan
  * Входящие: chalk.white
+ *
+ * @param msg — расшифрованное сообщение
+ * @param myUserId — userId текущего пользователя
+ * @param senderName — имя отправителя (если не передано, для исходящих используется 'вы')
  */
-export function printMessage(msg: DecryptedMessage, myUserId: string): void {
+export function printMessage(msg: DecryptedMessage, myUserId: string, senderName?: string): void {
   const date = new Date(msg.timestamp);
   const hh = String(date.getHours()).padStart(2, '0');
   const mm = String(date.getMinutes()).padStart(2, '0');
   const timestamp = `[${hh}:${mm}]`;
 
   const isOutgoing = msg.senderId === myUserId;
-  const prefix = isOutgoing ? chalk.cyan(`${timestamp} вы: `) : chalk.white(`${timestamp} `);
+  const name = senderName ?? (isOutgoing ? 'вы' : '');
+  const prefix = isOutgoing
+    ? chalk.cyan(`${timestamp} ${name}: `)
+    : chalk.white(`${timestamp} ${name}  `);
 
   console.log(prefix + (isOutgoing ? chalk.cyan(msg.content) : msg.content));
 }
