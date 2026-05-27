@@ -1,4 +1,5 @@
 import * as readline from 'readline';
+import { password as inquirerPassword } from '@inquirer/prompts';
 
 /**
  * Единственный readline.Interface на весь процесс.
@@ -28,54 +29,11 @@ export function ask(label: string): Promise<string> {
 
 /**
  * Вывести "label: " (без echo), вернуть ввод.
- * Реализовать через mute/unmute с process.stdout.write.
- *
- * Если stdin не является TTY (пайплайн, перенаправление),
- * используется fallback — обычный ask() с предупреждением.
+ * Использует @inquirer/prompts для надёжного ввода пароля.
  */
 export function password(label: string): Promise<string> {
-  // Fallback для нетTY-сред
-  if (!process.stdin.isTTY) {
-    process.stderr.write('⚠ stdin is not a TTY — password will be visible\n');
-    return ask(label);
-  }
-
-  return new Promise((resolve) => {
-    process.stdout.write(label + ': ');
-
-    const onData = (data: Buffer) => {
-      const input = data.toString().trim();
-      cleanup();
-      // Выводим перевод строки, чтобы курсор переместился на новую строку
-      process.stdout.write('\n');
-      resolve(input);
-    };
-
-    const onExit = () => {
-      cleanup();
-      resolve('');
-    };
-
-    const cleanup = () => {
-      process.stdin.removeListener('data', onData);
-      process.stdin.removeListener('end', onExit);
-      // Включаем echo обратно
-      process.stdin.setRawMode(false);
-      process.stdin.pause();
-    };
-
-    try {
-      // Отключаем echo
-      process.stdin.setRawMode(true);
-      process.stdin.resume();
-      process.stdin.once('data', onData);
-      process.stdin.once('end', onExit);
-    } catch (err) {
-      // setRawMode может выбросить, если stdin повреждён
-      cleanup();
-      process.stderr.write(`⚠ Failed to set raw mode: ${(err as Error).message}\n`);
-      resolve('');
-    }
+  return inquirerPassword({
+    message: label,
   });
 }
 
