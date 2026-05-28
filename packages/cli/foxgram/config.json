@@ -1,0 +1,8 @@
+{
+  "serverUrl": "http://localhost:3000",
+  "userId": "8c071471-8cf8-4116-958e-91c68067a1eb",
+  "username": "anton",
+  "publicKey": "B9_uW6K6zLx6JMWad1O5SFmRdGSkoqCUyO0uF5MMrhM",
+  "secretKey": "xHMetKvJobiRik0ejcYx_yJkK2cVmvj2zlYzYISLHts",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4YzA3MTQ3MS04Y2Y4LTQxMTYtOTU4ZS05MWM2ODA2N2ExZWIiLCJpYXQiOjE3Nzk5NzMyMjksImV4cCI6MTc4MDU3ODAyOX0.20UPFvHYbzV7XsLiNYRxe6IkMd7uCbnRg7NtV1Ejnek"
+}

@@ -1,5 +1,5 @@
 import * as readline from 'readline';
-import { password as inquirerPassword } from '@inquirer/prompts';
+import { password as inquirerPassword, input as inquirerInput, confirm as inquirerConfirm } from '@inquirer/prompts';
 
 /**
  * Единственный readline.Interface на весь процесс.
@@ -20,11 +20,9 @@ export function closePrompt(): void {
  * Вывести "label: " и вернуть ввод пользователя.
  */
 export function ask(label: string): Promise<string> {
-  return new Promise((resolve) => {
-    rl.question(label + ' ', (answer) => {
-      resolve(answer.trim());
-    });
-  });
+  return inquirerInput({
+    message: label + ':',    
+  })
 }
 
 /**
@@ -33,7 +31,8 @@ export function ask(label: string): Promise<string> {
  */
 export function password(label: string): Promise<string> {
   return inquirerPassword({
-    message: label,
+    message: label + ':',
+    mask: '○'
   });
 }
 
@@ -57,6 +56,7 @@ export async function choose(label: string, max: number): Promise<number> {
  * Вывести "label (y/N): ", вернуть true если ввод "y" или "Y".
  */
 export async function confirm(label: string): Promise<boolean> {
-  const input = await ask(`${label} (y/N):`);
-  return input === 'y' || input === 'Y';
+  return inquirerConfirm({
+    message: label + ':'
+  });
 }
