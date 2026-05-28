@@ -251,6 +251,41 @@ interface Config {
 }
 ```
 
+## ChatMessage (внутри chat screen)
+
+```typescript
+interface ChatMessage extends DecryptedMessage {
+  senderUsername: string;
+  recipientUsername: string;
+}
+```
+
+Расширяет `DecryptedMessage` из `foxgram-core` полями `senderUsername` и `recipientUsername` — подхватываются из contacts для отображения в UI.
+
+## Message flow в чате
+
+```
+[Background Poll]
+  setInterval(10s)
+    ↓
+  getMessages(contactUserId)
+    ↓
+  decryptMessage() для каждого
+    ↓
+  messages.sort(timestamp)
+    ↓
+  renderChat()
+
+[User Input]
+  ask() → text
+    ↓
+  sendOptimistic(text)
+    ├── optimisticMsg.push() → renderChat()
+    └── sendMessage() → сервер
+        ↓
+  следующий poll: полная замена массива серверными сообщениями
+```
+
 ---
 
 ## Renderer Helpers (renderer.ts)
@@ -260,7 +295,7 @@ printHeader(title: string): void     // box with title
 printMenu(items: MenuItem[]): void   // numbered list
 printError(message: string): void    // red text
 printSuccess(message: string): void  // green text
-printMessage(msg: ChatMessage): void // [HH:MM] user: text
+printMessage(msg: DecryptedMessage, myUserId: string, senderName?: string): void // [HH:MM] user: text
 ```
 
 ---
@@ -280,14 +315,17 @@ All built on Node.js `readline` — no external prompt libraries.
 
 ## Polling
 
-In the chat screen, poll for new messages before every prompt iteration:
+In the chat screen, a **background timer** polls for new messages every 10 seconds:
 
 ```typescript
-const newMessages = await api.getMessages(contactId);
-// render new messages, then show the input prompt
+const pollInterval = setInterval(async () => {
+  await loadMessages();
+}, 10_000);
 ```
 
-No background timers — polling happens synchronously in the chat loop.
+`loadMessages()` загружает **все** сообщения с сервера, сортирует по `timestamp` и полностью заменяет массив сообщений. При выходе из чата таймер очищается через `clearInterval`.
+
+При отправке сообщения используется **оптимистичный апдейт** — сообщение мгновенно добавляется в массив и отображается, затем серверное сообщение заменяет его при следующем poll.
 
 ---
 

@@ -26,6 +26,7 @@ export interface Contact {
 export interface StoredMessage {
   id: string;
   senderId: string;
+  recipientId: string;  // UUID получателя сообщения
   encryptedContent: string;  // base64url, contains nonce || ciphertext
   timestamp: number;
 }
