@@ -190,23 +190,36 @@ export class Foxgram {
   /**
    * Отправляет зашифрованное сообщение получателю.
    *
-   * @param recipientId — UUID получателя
+   * @param recipientId — UUID получателя (для API)
+   * @param recipientPublicKey — публичный ключ получателя (base64url, 32 байта) для шифрования
    * @param plaintext — текстовое сообщение
    * @returns результат отправки с messageId и timestamp
    */
-  async sendMessage(recipientId: string, plaintext: string): Promise<SendMessageResult> {
+  async sendMessage(
+    recipientId: string,
+    recipientPublicKey: string,
+    plaintext: string,
+  ): Promise<SendMessageResult> {
     if (!this.currentUser) {
       throw new Error('User not authenticated. Please login first.');
+    }
+
+    // Валидация recipientPublicKey — должна быть base64url 32-байтовым ключом
+    const pubKeyBytes = Buffer.from(recipientPublicKey, 'base64url');
+    if (pubKeyBytes.length !== 32) {
+      throw new Error(
+        'recipientPublicKey: invalid length, expected 32 bytes (base64url)',
+      );
     }
 
     // Шифруем plaintext через crypto.encryptMessage
     const { encryptedContent } = await encryptMessage({
       message: plaintext,
       mySecretKey: this.currentUser.secretKey,
-      theirPublicKey: recipientId, // recipient's public key
+      theirPublicKey: recipientPublicKey,
     });
 
-    // Вызываем api.sendMessage
+    // Вызываем api.sendMessage — передаём UUID получателя
     return this.api.sendMessage(recipientId, encryptedContent);
   }
 

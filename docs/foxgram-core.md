@@ -54,11 +54,12 @@ await client.login({
   password: 'secretpass123'
 });
 
-// Send message
-const { messageId, timestamp } = await client.sendMessage({
-  recipientId: 'user-uuid',
-  plaintext: 'Hello!'
-});
+// Send message — recipientId (UUID) + recipientPublicKey (base64url, 32 bytes)
+const { messageId, timestamp } = await client.sendMessage(
+  'user-uuid',
+  'recipient-public-key-base64url',
+  'Hello!'
+);
 
 // Get messages for specific user (open chat)
 const { messages } = await client.getMessages({
@@ -166,8 +167,8 @@ await api.getUserPublicKey(userId);
 // GET /api/users/:id/public-key
 // Returns: { userId, username, publicKey }
 
-// Send message
-await api.sendMessage({ recipientId, encryptedContent });
+// Send message — recipientId (UUID) + encryptedContent (base64url)
+await api.sendMessage(recipientId, encryptedContent);
 // POST /api/messages/send
 // Returns: { messageId, timestamp }
 

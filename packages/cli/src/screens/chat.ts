@@ -108,7 +108,7 @@ export async function chat(state: AppState): Promise<Screen> {
 
       // Отправляем сообщение
       try {
-        await state.foxgram.sendMessage(contact.userId, input);
+        await state.foxgram.sendMessage(contact.userId, contact.publicKey, input);
         // Отправленное сообщение появится при следующем loadMessages
         printSuccess('Message sent.');
       } catch (sendErr) {
