@@ -139,6 +139,7 @@ messagesRouter.get('/poll', async (req: Request, res: Response): Promise<void> =
     return {
       id: msg.id,
       senderId: msg.sender_id,
+      recipientId: msg.recipient_id,
       encryptedContent,
       timestamp: msg.created_at,
     };

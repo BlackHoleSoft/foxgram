@@ -208,6 +208,7 @@ Authorization: Bearer <token>
     {
       "id": "550e8400-e29b-41d4-a716-446655440002",
       "senderId": "550e8400-e29b-41d4-a716-446655440000",
+      "recipientId": "999e5555-e29b-41d4-a716-446655440000",
       "encryptedContent": "YWJjZGVmZ2hpamtsbW5vcA...",
       "timestamp": 1715260800000
     }

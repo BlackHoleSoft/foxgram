@@ -7,7 +7,7 @@
     "start": "ts-node src/index.ts",
     "build": "tsc",
     "test": "jest --config jest.config.ts",
-    "test:e2e": "jest --config jest.config.ts --testPathPattern=e2e"
+    "test:e2e": "jest --config jest.config.ts --testPathPatterns=e2e"
   },
   "dependencies": {
     "argon2": "^0.31.0",
