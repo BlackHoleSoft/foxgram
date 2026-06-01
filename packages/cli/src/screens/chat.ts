@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { AppState, Screen } from '../state';
 import { printSection, printMessage, printSeparator, printError, printSuccess } from '../renderer';
 import { ask } from '../prompt';
@@ -16,12 +17,13 @@ interface ChatMessage extends DecryptedMessage {
 /**
  * Экран: чат с контактом.
  *
- * Загружает и отображает историю сообщений, позволяет отправлять сообщения.
  * Работает по принципу:
  * - Background polling каждые 10 секунд — загружает все сообщения с сервера,
  *   сортирует по timestamp, полностью заменяет массив сообщений, обновляет визуал.
  * - Оптимистичный апдейт — при отправке сообщение мгновенно добавляется в массив
  *   и отображается, затем серверное сообщение заменяет его при следующем poll.
+ * - Ввод: raw keypress на stdin. Любая клавиша (кроме 0) открывает ask() для ввода
+ *   сообщения. После отправки — loadMessages() для полной перезагрузки.
  *
  * @param state — состояние приложения, содержит selectedContact и foxgram SDK
  * @returns всегда 'contact-list' после выхода из чата
@@ -31,7 +33,9 @@ export async function chat(state: AppState): Promise<Screen> {
   const contact = state.selectedContact;
   if (!contact) {
     return 'contact-list';
-  }
+  }  
+
+  let isExiting = false;
 
   // Все сообщения для отображения (загружаются с сервера + оптимистичные исходящие)
   const messages: ChatMessage[] = [];
@@ -43,6 +47,8 @@ export async function chat(state: AppState): Promise<Screen> {
   }
   // Текущий userId — для определения исходящих
   const myUserId = state.foxgram.getUserId();
+  const myPubKey = state.foxgram.getPublicKey();
+
   // Сохраняем ссылку на contact для использования в замыканиях
   const { userId: contactUserId, username: contactUsername, publicKey: contactPublicKey } = contact;
 
@@ -60,11 +66,12 @@ export async function chat(state: AppState): Promise<Screen> {
 
       const chatMsg: ChatMessage = {
         ...decrypted,
-        senderUsername: senderContact?.username ?? decrypted.senderId,
+        senderUsername: isOutgoing ? state.foxgram.getUsername() ?? 'Вы' : (senderContact?.username ?? 'Собеседник'),
         recipientUsername: recipientContact?.username ?? rawMsg.recipientId,
       };
       messages.push(chatMsg);
-    } catch {
+    } catch (e) {
+      console.log('Error:', e);
       // Ошибка дешифрования — пропустить сообщение, вывести заглушку
       const date = new Date(rawMsg.timestamp);
       const hh = String(date.getHours()).padStart(2, '0');
@@ -79,6 +86,8 @@ export async function chat(state: AppState): Promise<Screen> {
    */
   async function loadMessages(): Promise<void> {
     try {
+      printSection(`Chat: ${contactUsername}`);
+      console.log(chalk.gray('Loading messages...'));
       const raw = await state.foxgram.getMessages(contactUserId);
 
       // Очистить массив перед добавлением (полная замена)
@@ -95,7 +104,7 @@ export async function chat(state: AppState): Promise<Screen> {
       );
 
       // Обновляем визуал
-      renderChat();
+      await renderChat();
     } catch (loadErr) {
       // Сетевая ошибка — вывести предупреждение, продолжить с имеющимися сообщениями
       process.stdout.write(
@@ -104,11 +113,29 @@ export async function chat(state: AppState): Promise<Screen> {
     }
   }
 
+  async function onSendMessage(input: string) {
+    if (isExiting) return;
+
+    try {
+      // Пустой ввод — вернуться к чату
+      if (input === '') {        
+        return;
+      }
+
+      // Отправляем сообщение
+      await sendOptimistic(input);
+      console.log('Message was sent');
+
+    } catch (askErr) {        
+      printError(`Input error: ${(askErr as Error).message}`);
+    }
+  }
+
   /**
-   * Отображает чат: заголовок, все сообщения, разделитель.
+   * Отображает чат: заголовок, все сообщения, подсказку.
    */
-  function renderChat(): void {
-    console.clear();
+  async function renderChat() {
+    // console.clear();
     printSection(`Chat: ${contactUsername}`);
 
     for (const msg of messages) {
@@ -116,6 +143,16 @@ export async function chat(state: AppState): Promise<Screen> {
     }
 
     printSeparator('─');
+    console.log(chalk.gray('enter message, 0 - exit'));
+
+    const input = await ask('User');
+
+    if (input === '0') {
+      isExiting = true;
+      return;
+    } else {
+      await onSendMessage(input);
+    }
   }
 
   /**
@@ -133,7 +170,6 @@ export async function chat(state: AppState): Promise<Screen> {
       recipientUsername: contactUsername,
     };
     messages.push(optimisticMsg);
-    renderChat();
 
     // Отправляем на сервер
     try {
@@ -143,29 +179,14 @@ export async function chat(state: AppState): Promise<Screen> {
       // Ошибка отправки — вывести ошибку красным, не выходить из чата
       printError(`Failed to send message: ${(sendErr as Error).message}`);
     }
-  }
-
-  // Запускаем background polling каждые 10 секунд
-  const pollInterval = setInterval(async () => {
-    await loadMessages();
-  }, 10_000);
+  } 
+  
 
   try {
-    // Загружаем все сообщения с сервера (первичная загрузка)
-    await loadMessages();
-
-    // Основной цикл чата — ввод пользователя
-    while (true) {
-      // Спрашиваем ввод пользователя
-      const input = await ask('Message (or 0 to go back): ');
-
-      // '0' или пустой ввод — выходим из чата
-      if (input === '0' || input === '') {
-        break;
-      }
-
-      // Отправляем сообщение (оптимистичный апдейт)
-      await sendOptimistic(input);
+    // Цикл
+    while (!isExiting) {
+      // Загружаем все сообщения с сервера и рендерим
+      await loadMessages();
     }
 
     // Очищаем selectedContact при выходе
@@ -175,8 +196,5 @@ export async function chat(state: AppState): Promise<Screen> {
     // Неожиданная ошибка — вывести и вернуться к списку
     printError(`Chat error: ${(err as Error).message}`);
     return 'contact-list';
-  } finally {
-    // Останавливаем background polling при выходе
-    clearInterval(pollInterval);
   }
 }
