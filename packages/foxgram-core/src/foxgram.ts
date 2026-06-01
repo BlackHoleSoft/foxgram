@@ -248,11 +248,23 @@ export class Foxgram {
     // Определяем, исходящее это сообщение или входящее
     const isOutgoing = message.senderId === this.currentUser.userId;
 
-    // Дешифруем используя свой secretKey и publicKey отправителя
+    // Получаем нужный публичный ключ из контактов
+    // Для входящих — ключ отправителя, для исходящих — ключ получателя
+    const contacts = await this.getContacts();
+    const targetUserId = isOutgoing ? message.recipientId : message.senderId;
+    const contact = contacts.find(c => c.userId === targetUserId);
+
+    if (!contact) {
+      throw new Error(
+        `Public key not found for user ${targetUserId}. Contact must be added to open this chat.`,
+      );
+    }
+
+    // Дешифруем используя свой secretKey и publicKey собеседника
     const content = await decryptMessage({
       encryptedContent: message.encryptedContent,
       mySecretKey: this.currentUser.secretKey,
-      theirPublicKey: message.senderId,
+      theirPublicKey: contact.publicKey,
     });
 
     return {
