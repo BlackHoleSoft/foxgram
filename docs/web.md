@@ -91,6 +91,8 @@ packages/
         contacts/
           useContactsQuery.ts       # useQuery: список контактов из IndexedDB
           useAddContactMutation.ts  # useMutation: добавление контакта
+          useAvatarQuery.ts         # useQuery: аватар контакта (auto-generate + cache)
+          useAvatarMutation.ts      # useMutation: сохранение аватара в IndexedDB
         auth/
           useLoginMutation.ts       # useMutation: логин + расшифровка ключей
           useRegisterMutation.ts    # useMutation: регистрация + генерация keypair
@@ -103,6 +105,7 @@ packages/
         socket.ts      # socket.io клиент
         push.ts        # Web Push подписка
         crypto.ts      # Обёртка над foxgram-core
+        avatar.ts      # Генерация аватаров (canvas + seeded PRNG, см. раздел 13)
       sw/
         service-worker.ts  # Service Worker (PWA + Push)
       App.tsx
@@ -174,12 +177,19 @@ keys
 
 config
   - keyPath: "key"
-  - Записи: userId, username, serverUrl
+  - Записи: { userId, username, serverUrl }
 
 contacts
   - keyPath: "userId"
   - Поля: { userId, username, publicKey }
   - Index: "username"
+
+avatars
+  - keyPath: "userId"
+  - Поля: { userId, avatar }
+  - avatar: string | null (base64 data URL, генерируется из userId)
+  - Index: нет
+  - Назначение: отдельное хранилище для аватаров всех пользователей (текущий + контакты)
 
 messages
   - keyPath: "id"
@@ -442,7 +452,8 @@ ChatPage
 ProfilePage / ContactList
   └── useContacts()        ← хук бизнес-логики (hooks/)
         ├── useContactsQuery()       ← TanStack Query (queries/contacts/)
-        └── useAddContactMutation()  ← TanStack Query (queries/contacts/)
+        ├── useAddContactMutation()  ← TanStack Query (queries/contacts/)
+        └── avatar generation (auto, см. раздел 13)
 ```
 
 **Принцип разделения:**
@@ -503,7 +514,155 @@ interface SocketState {
 
 ---
 
-## 13. Экраны
+### Общие правила использования аватара
+
+Аватар отображается везде, где есть пользователь: в списке контактов (левая панель), в MessageBubble (шапка чата, профиль контакта), в ProfilePage, в push-уведомлениях (fallback).
+
+Формат: `data:image/png;base64,...` (inline data URL). Размер на экране: 40×40px (компактный), 80×80px (профиль).
+
+---
+
+## 13. Генерация аватара
+
+Аватар пользователя — детерминированный pixel-art на основе `userId`. Один и тот же userId всегда даёт один и тот же аватар. Не зависит от имени, публичного ключа или других данных.
+
+### 13.1 Алгоритм
+
+**Шаг 1 — Палитра фона:**
+
+Предустановленная палитра из 16 пастельных цветов (HSL-определённые):
+
+```
+1.  #F9E4D4  (тёплый персиковый)
+2.  #F4D9D9  (розовый)
+3.  #E8D5E8  (лавандовый)
+4.  #D9E8F4  (голубой)
+5.  #D4E8F9  (небесный)
+6.  #D9F4E8  (мятный)
+7.  #E8F9D4  (лимонный)
+8.  #F9F4D4  (ванильный)
+9.  #F4E8D4  (персиковый)
+10. #E4D4F9  (сиреневый)
+11. #D4F9F4  (бирюзовый)
+12. #F9D4E8  (коралловый)
+13. #C8B8D8  (тёмный лавандовый)
+14. #B8D8C8  (тёмный мятный)
+15. #D8C8B8  (тёмный песочный)
+16. #E8D8C8  (светлый песочный)
+```
+
+**Шаг 2 — Deterministic seed из userId:**
+
+```
+userId (string) → простой JS hash (djb2 или аналог) → uint32 seed
+```
+
+Пример hash-функции:
+```typescript
+function hashUserId(userId: string): number {
+  let hash = 5381
+  for (let i = 0; i < userId.length; i++) {
+    hash = ((hash << 5) + hash) + userId.charCodeAt(i)
+  }
+  return hash >>> 0  // unsigned 32-bit
+}
+```
+
+**Шаг 3 — Seeded PRNG:**
+
+LCG (Linear Congruential Generator), инициализированный seed:
+
+```typescript
+class SeededRandom {
+  private state: number
+
+  constructor(seed: number) {
+    this.state = seed
+  }
+
+  next(): number {
+    // constants from Numerical Recipes
+    this.state = (this.state * 1664525 + 1013904223) >>> 0
+    return this.state / 0xFFFFFFFF
+  }
+
+  nextInt(max: number): number {
+    return Math.floor(this.next() * max)
+  }
+}
+```
+
+**Шаг 4 — Генерация аватара:**
+
+```typescript
+function generateAvatar(userId: string): string {
+  const seed = hashUserId(userId)
+  const rng = new SeededRandom(seed)
+
+  // 1. Фон — случайный цвет из палитры
+  const bgIndex = rng.nextInt(16)
+  const bgColor = PALETTE[bgIndex]
+
+  // 2. Сетка 8x8 — бинарный паттерн (0 или 1)
+  const grid: number[][] = []
+  for (let y = 0; y < 8; y++) {
+    grid[y] = []
+    for (let x = 0; x < 8; x++) {
+      grid[y][x] = rng.nextInt(2) // 0 или 1
+    }
+  }
+
+  // 3. Рисуем на canvas
+  const size = 64
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+
+  // Фон
+  ctx.fillStyle = bgColor
+  ctx.fillRect(0, 0, size, size)
+
+  // Квадраты (ячейка = 8px)
+  const cellSize = size / 8
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      if (grid[y][x] === 1) {
+        ctx.fillStyle = '#FFFFFF'
+        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize)
+      }
+    }
+  }
+
+  // 4. Возвращаем base64
+  return canvas.toDataURL('image/png')
+}
+```
+
+### 13.2 Хранение аватара
+
+- **IndexedDB:** отдельное объектное хранилище `avatars` (keyPath: `userId`)
+- **Поле:** `{ userId, avatar: string | null }` (base64 data URL)
+- **Кеширование:** при генерации — сразу сохранить в `avatars`. При отображении — читать из IDB, не пересчитывать
+- **Invalidation:** аватар пересчитывается только при смене userId (невозможно). При миграции IDB — пересчитать все записи
+- **Размер:** 8x8 pixel-art на canvas 64x64 → PNG ~200–800 байт. Один аватар крайне лёгкий, но хранилище позволяет масштабировать в будущем (SVG, WebP, retina-версии)
+
+### 13.3 Файл реализации
+
+```
+packages/web/src/utils/avatar.ts
+```
+
+- `generateAvatar(userId: string): string` — публичный API
+- `saveAvatar(userId: string, avatar: string): Promise<void>` — сохранение в IndexedDB
+- `getAvatar(userId: string): Promise<string | null>` — чтение из IndexedDB
+- `PALETTE` — константа, экспортируется для тестирования
+
+**Без внешних зависимостей.** Только нативный Canvas API и ~60 строк TypeScript.
+
+---
+
+## 14. Экраны
 
 ### LoginPage / RegisterPage
 
@@ -516,13 +675,14 @@ interface SocketState {
 
 **Левая панель (ContactList):**
 - Список контактов из IndexedDB
+- Аватар контакта (pixel-art, 40×40px)
 - Онлайн-индикатор (зелёная точка)
 - Последнее сообщение + время
 - Кнопка `[+]` → AddContactModal
 - Кнопка профиля внизу → ProfilePage
 
 **Правая панель (ChatWindow):**
-- Имя контакта в шапке, онлайн-статус
+- Аватар контакта + имя в шапке, онлайн-статус
 - Список сообщений (`MessageBubble` — исходящие справа, входящие слева)
 - "Alice печатает..." внизу списка если `typingUsers.has(contactId)`
 - Поле ввода + кнопка отправки
@@ -547,11 +707,17 @@ interface SocketState {
 **Общее для обеих вкладок:**
 - Поля username, userId, publicKey — **не редактируются**, заполняются автоматически из QR или ссылки
 - Кнопка "Добавить" → `useAddContactMutation` → сохранить в IndexedDB → инвалидировать `useContactsQuery`
+- **Автосгенерация аватара:** при добавлении контакта — вызвать `generateAvatar(contact.userId)` → сохранить в хранилище `avatars` → инвалидировать `useContactsQuery`
 - Если данные невалидны — показать ошибку валидации (неполная ссылка, неверный формат publicKey и т.д.)
 
 ### ProfilePage
 
-- Аватар (инициалы)
+- Аватар (детерминированный pixel-art, см. раздел 13)
+- Username, userId (копируемый)
+- QR-код собственного профиля (`qrcode.react`)
+- Кнопки: "Скопировать ссылку", "Сохранить QR"
+- Кнопка "Выйти"
+- Переключатель темы (light / dark)
 - Username, userId (копируемый)
 - QR-код собственного профиля (`qrcode.react`)
 - Кнопки: "Скопировать ссылку", "Сохранить QR"
@@ -560,7 +726,7 @@ interface SocketState {
 
 ---
 
-## 14. WebSocket-флоу
+## 15. WebSocket-флоу
 
 ### Подключение
 
@@ -594,7 +760,7 @@ interface SocketState {
 
 ---
 
-## 15. Безопасность
+## 16. Безопасность
 
 | Угроза | Защита |
 |--------|--------|
@@ -609,7 +775,7 @@ interface SocketState {
 
 ---
 
-## 16. Конфигурация окружения
+## 17. Конфигурация окружения
 
 ### `packages/web/.env`
 
@@ -628,7 +794,7 @@ VAPID_EMAIL=mailto:admin@example.com
 
 ---
 
-## 17. Скрипты
+## 18. Скрипты
 
 ```jsonc
 // packages/web/package.json
