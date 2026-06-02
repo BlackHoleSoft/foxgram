@@ -71,7 +71,7 @@ messagesRouter.post('/send', async (req: Request, res: Response): Promise<void> 
   );
 
   // Сохранить encryptedContent в data/messages/<messageId>.bin
-  const messagesDir = path.resolve('./data/messages');
+  const messagesDir = process.env.MESSAGES_DIR || path.resolve('./data/messages');
   const filePath = path.join(messagesDir, `${messageId}.bin`);
   fs.writeFileSync(filePath, encryptedContent, 'utf-8');
 
@@ -128,7 +128,7 @@ messagesRouter.get('/poll', async (req: Request, res: Response): Promise<void> =
 
   // Для каждого сообщения прочитать encryptedContent из файла
   const result = messages.map((msg) => {
-    const messagesDir = path.resolve('./data/messages');
+    const messagesDir = process.env.MESSAGES_DIR || path.resolve('./data/messages');
     const filePath = path.join(messagesDir, `${msg.id}.bin`);
 
     let encryptedContent = '';

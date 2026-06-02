@@ -13,10 +13,13 @@
     "libsodium-wrappers": "^0.7.0"
   },
   "devDependencies": {
+    "@types/dotenv": "^6.1.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.19.41",
+    "dotenv": "^17.4.2",
     "jest": "^30.4.2",
     "ts-jest": "^29.4.10",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "uuid": "^14.0.0"
   }
 }

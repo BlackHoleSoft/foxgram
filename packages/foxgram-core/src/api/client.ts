@@ -225,26 +225,22 @@ export class ApiClient {
   }
 
   /**
-   * Парсит HTTP-ошибку в ApiError.
+   * Парсит HTTP-ошибку и возвращает Error с кодом.
    *
    * @param response - HTTP-ответ с ошибкой
-   * @returns ApiError с кодом и сообщением
+   * @returns Error с полем code и сообщением из тела ответа
    */
-  private async parseError(response: Response): Promise<ApiError> {
+  private async parseError(response: Response): Promise<Error> {
     try {
       const body = await response.json();
-      // Backend возвращает { error: "description" }
-      // Преобразуем в формат ApiError
-      return {
-        code: this.mapErrorCode(response.status, body.error),
-        message: body.error || `HTTP ${response.status}`,
-      };
+      const message = body.error || `HTTP ${response.status}`;
+      const err = new Error(message) as Error & { code: string };
+      err.code = this.mapErrorCode(response.status, body.error);
+      return err;
     } catch {
-      // Если не удалось распарсить JSON, возвращаем базовую ошибку
-      return {
-        code: this.mapErrorCode(response.status, ''),
-        message: `HTTP ${response.status}`,
-      };
+      const err = new Error(`HTTP ${response.status}`) as Error & { code: string };
+      err.code = this.mapErrorCode(response.status, '');
+      return err;
     }
   }
 

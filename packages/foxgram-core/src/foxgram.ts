@@ -114,14 +114,8 @@ export class Foxgram {
    * @returns результат входа с token и userId
    */
   async login(username: string, password: string): Promise<AuthResult> {
-    // Загружаем сохранённый secretKey из storage
+    // Загружаем сохранённый конфиг (может отсутствовать при входе с нового устройства)
     const savedConfig = await this.storage.loadConfig();
-
-    if (!savedConfig?.secretKey) {
-      const err = new Error('No saved secret key found. Please register first.');
-      (err as NodeJS.ErrnoException).code = 'NO_SECRET_KEY';
-      throw err;
-    }
 
     // Вызываем API для входа
     const result = await this.api.login(username, password);
@@ -129,17 +123,17 @@ export class Foxgram {
     // Устанавливаем токен в API-клиент
     this.api.setToken(result.token);
 
-    // Устанавливаем currentUser
+    // Устанавливаем currentUser (secretKey из storage, если есть)
     this.currentUser = {
       userId: result.userId,
       username,
-      publicKey: savedConfig.publicKey || '',
-      secretKey: savedConfig.secretKey,
+      publicKey: savedConfig?.publicKey || '',
+      secretKey: savedConfig?.secretKey || '',
     };
 
     // Обновляем config
     this.config = {
-      ...savedConfig,
+      ...(savedConfig || { serverUrl: this.config.serverUrl, homeDir: this.config.homeDir }),
       userId: result.userId,
       username,
       token: result.token,
@@ -321,7 +315,7 @@ export class Foxgram {
   /**
    * Выходит из аккаунта.
    *
-   * Очищает currentUser и вызывает storage.clear().
+   * Очищает currentUser и токен, но сохраняет ключи в storage для повторного входа.
    */
   async logout(): Promise<void> {
     // Очищаем currentUser
@@ -330,7 +324,11 @@ export class Foxgram {
     // Очищаем токен в API-клиенте
     this.api.setToken('');
 
-    // Очищаем storage
-    await this.storage.clear();
+    // Убираем токен из сохранённого конфига, оставляя ключи для повторного входа
+    const savedConfig = await this.storage.loadConfig();
+    if (savedConfig) {
+      const { token: _removed, ...configWithoutToken } = savedConfig;
+      await this.storage.saveConfig(configWithoutToken);
+    }
   }
 }
