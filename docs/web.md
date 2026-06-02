@@ -174,7 +174,7 @@ keys
 
 config
   - keyPath: "key"
-  - Записи: userId, username, token, serverUrl
+  - Записи: userId, username, serverUrl
 
 contacts
   - keyPath: "userId"
@@ -224,12 +224,32 @@ secretKey ──→ AES-GCM(derivedKey, iv=random12) ──→ encryptedSecretKe
 // packages/backend/src/socket.ts
 import { Server } from 'socket.io'
 import { verifyToken } from './middleware/auth'
+import cookie from 'cookie'
 
-// Аутентификация через JWT в handshake
+// Аутентификация через HttpOnly-куку в handshake
 io.use((socket, next) => {
-  const token = socket.handshake.auth.token
+  const cookies = cookie.parse(socket.handshake.headers.cookie ?? '')
+  const token = cookies['foxgram_token']
   // verify → socket.data.userId
 })
+```
+
+**CORS для socket.io:** сервер должен разрешать `credentials: true` для браузерного origin:
+
+```typescript
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.WEB_ORIGIN, // например http://localhost:5173
+    credentials: true,
+  },
+})
+```
+
+Клиент подключается с `withCredentials: true` — браузер автоматически отправит HttpOnly-куку `foxgram_token` при handshake:
+
+```typescript
+// packages/web/src/services/socket.ts
+const socket = io(serverUrl, { withCredentials: true })
 ```
 
 **События от сервера → клиенту:**
@@ -410,7 +430,7 @@ LoginPage
   └── useAuth()            ← хук бизнес-логики (hooks/)
         ├── useLoginMutation()    ← TanStack Query (queries/auth/)
         ├── useRegisterMutation() ← TanStack Query (queries/auth/)
-        └── authStore             ← Zustand: userId, token, secretKey
+        └── authStore             ← Zustand: userId, secretKey
 
 ChatPage
   └── useChat(contactId)   ← хук бизнес-логики (hooks/)
@@ -440,7 +460,6 @@ ProfilePage / ContactList
 interface AuthState {
   userId: string | null
   username: string | null
-  token: string | null  // только в памяти — для socket.io handshake
   publicKey: string | null
   secretKey: string | null  // в памяти, не сохраняется
   isAuthenticated: boolean
@@ -452,7 +471,7 @@ interface AuthState {
 
 > Логика login/register вынесена в `useLoginMutation` / `useRegisterMutation` (TanStack Query). После успеха мутация вызывает `authStore.setAuth(...)`.
 
-> **Хранение токена:** HTTP API-запросы авторизуются автоматически через HttpOnly-куку `foxgram_token` (устанавливается сервером при логине). В `authStore.token` токен хранится только в памяти — исключительно для передачи в socket.io handshake (`{ auth: { token } }`). После перезагрузки страницы куку браузер сохраняет, но `authStore.token` сбрасывается — пользователю нужно повторно ввести пароль для расшифровки `secretKey` из IndexedDB.
+> **Авторизация:** HTTP API-запросы и socket.io handshake авторизуются автоматически через HttpOnly-куку `foxgram_token`. Токен никогда не попадает в JS-память. После перезагрузки страницы куку браузер сохраняет, но `secretKey` исчезает из памяти — пользователю нужно повторно ввести пароль для расшифровки `secretKey` из IndexedDB.
 
 ### chatStore
 
@@ -475,7 +494,7 @@ interface ChatState {
 interface SocketState {
   socket: Socket | null
   connected: boolean
-  connect: (token: string) => void
+  connect: () => void
   disconnect: () => void
   emitTypingStart: (toUserId: string) => void
   emitTypingStop: (toUserId: string) => void
@@ -539,9 +558,9 @@ interface SocketState {
 ### Подключение
 
 ```
-1. После login → socketStore.connect(token)
-2. socket.io: handshake с { auth: { token } }
-3. Сервер верифицирует JWT → socket.data.userId
+1. После login → socketStore.connect()
+2. socket.io: handshake с withCredentials: true → браузер отправляет куку foxgram_token
+3. Сервер парсит cookie → верифицирует JWT → socket.data.userId
 4. Сервер: userSocketMap[userId] = socket.id
 5. Broadcast: user:online { userId }
 ```
