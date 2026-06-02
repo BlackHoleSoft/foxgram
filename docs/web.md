@@ -32,7 +32,8 @@
 | Язык | **TypeScript** (strict mode, `noUncheckedIndexedAccess`) |
 | Фреймворк | React 19 + Vite 6 |
 | Роутинг | React Router v7 |
-| Стейт | Zustand |
+| Стейт (синхронный/глобальный) | Zustand |
+| Стейт (асинхронный/серверный) | **@tanstack/react-query** |
 | Стили | Tailwind CSS v4 |
 | UI-компоненты | **shadcn/ui** (Button, Input, Dialog, Tabs, Avatar, Badge, Tooltip, Separator и др.) |
 | WebSocket | socket.io-client |
@@ -54,7 +55,7 @@
 | socket.io | WebSocket-сервер поверх существующего Express |
 | web-push | Отправка push-уведомлений по VAPID |
 | Таблица `push_subscriptions` | Хранение подписок браузеров |
-| Endpoint `GET /api/users/search` | Поиск пользователя по username |
+| Set-Cookie в `POST /api/auth/login` | HttpOnly-кука с JWT для браузерной авторизации |
 
 ---
 
@@ -78,10 +79,24 @@ packages/
         RegisterPage.tsx
         ChatPage.tsx    # Основной layout: левая панель + чат
         ProfilePage.tsx
-      stores/          # Zustand-хранилища
+      hooks/           # Хуки с бизнес-логикой разделов (используют queries + stores)
+        useAuth.ts
+        useChat.ts
+        useContacts.ts
+        useProfile.ts
+      queries/         # TanStack Query хуки (queryFn/mutationFn вызывают foxgram-core)
+        messages/
+          useMessagesQuery.ts       # useQuery: загрузка сообщений контакта
+          useSendMessageMutation.ts # useMutation: отправка зашифрованного сообщения
+        contacts/
+          useContactsQuery.ts       # useQuery: список контактов из IndexedDB
+          useAddContactMutation.ts  # useMutation: добавление контакта
+        auth/
+          useLoginMutation.ts       # useMutation: логин + расшифровка ключей
+          useRegisterMutation.ts    # useMutation: регистрация + генерация keypair
+      stores/          # Zustand-хранилища (только синхронный/глобальный стейт)
         authStore.ts
-        chatStore.ts
-        contactsStore.ts
+        chatStore.ts    # typingUsers, onlineUsers, activeContactId
         socketStore.ts
       services/
         db.ts          # IndexedDB через idb
@@ -235,12 +250,19 @@ io.use((socket, next) => {
 | `typing:stop` | `{ toUserId }` | Прекратил ввод (>2 с паузы) |
 | `user:subscribe` | `{ userId }` | Подписаться на статус пользователя |
 
-### 8.2 Новые REST-эндпоинты
+### 8.2 Изменение `POST /api/auth/login`
 
-**`GET /api/users/search?username=:q`** (protected)
-- Поиск пользователей по username (частичное совпадение)
-- Ответ: `{ users: [{ userId, username, publicKey }] }`
-- Нужен для добавления контакта по имени (альтернатива QR)
+Помимо тела ответа, эндпоинт теперь выставляет токен в заголовке `Set-Cookie` — для прозрачной авторизации браузерных запросов:
+
+```
+Set-Cookie: foxgram_token=<jwt>; HttpOnly; SameSite=Strict; Max-Age=604800; Secure (только в production)
+```
+
+**Обратная совместимость:** тело ответа `{ token, userId }` сохраняется. CLI-клиент и старые версии продолжают работать через заголовок `Authorization: Bearer <token>`.
+
+Браузерный клиент полагается на куку — fetch-запросы отправляют её автоматически, явное добавление `Authorization` не требуется.
+
+### 8.3 Новые REST-эндпоинты
 
 **`POST /api/push/subscribe`** (protected)
 - Body: `{ subscription: PushSubscription }` (Web Push subscription object)
@@ -249,7 +271,7 @@ io.use((socket, next) => {
 **`DELETE /api/push/subscribe`** (protected)
 - Удаляет подписку при выходе
 
-### 8.3 Схема БД: новые таблицы
+### 8.4 Схема БД: новые таблицы
 
 ```sql
 CREATE TABLE push_subscriptions (
@@ -263,7 +285,7 @@ CREATE TABLE push_subscriptions (
 CREATE INDEX push_subs_user_idx ON push_subscriptions(user_id);
 ```
 
-### 8.4 Push-уведомления: серверная логика
+### 8.5 Push-уведомления: серверная логика
 
 При получении нового сообщения (в route POST `/api/messages/send`):
 1. Отправить через socket.io получателю если он online
@@ -311,6 +333,30 @@ Payload пуша (зашифровывается через VAPID):
 - **API запросы:** `NetworkFirst` — сначала сеть, fallback на кеш
 - **Push-обработчик:** слушать `push` event → показывать уведомление
 
+### Обновление приложения
+
+`vite-plugin-pwa` настраивается с `registerType: 'prompt'`. При каждом старте приложения (`App.tsx`) вызывается `registration.update()` — браузер делает сетевой запрос к `sw.js` на статик-сервере и сравнивает с текущей версией побайтово. Браузер всегда обходит кеш для SW-файла, поэтому проверка надёжна. Workbox вшивает хэши всех статических файлов в `sw.js` — любой новый деплой меняет его содержимое.
+
+**Флоу обновления:**
+
+```
+1. App.tsx монтируется → registration.update()
+2. Браузер скачивает новый sw.js → новый SW в состоянии waiting
+3. useRegisterSW({ onNeedRefresh }) → показать UpdateBanner
+4. Пользователь нажимает "Обновить" → updateServiceWorker() → skipWaiting() → location.reload()
+   Пользователь нажимает ✕ → скрыть баннер, остаться на текущей версии
+```
+
+**`UpdateBanner`** — фиксированная полоса вверху страницы (над основным layout):
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Доступна новая версия Foxgram       [Обновить]   [✕]  │
+└─────────────────────────────────────────────────────────┘
+```
+
+Компонент рендерится в `App.tsx` и управляется через `useRegisterSW` из `vite-plugin-pwa`.
+
 ```typescript
 // sw/service-worker.ts — push handler
 self.addEventListener('push', (event) => {
@@ -357,7 +403,36 @@ foxgram://add?u=<username>&id=<userId>&k=<publicKey_base64url>
 
 ---
 
-## 11. Zustand-хранилища
+## 11. Архитектурный паттерн: Pages → Hooks → Queries + Stores
+
+```
+LoginPage
+  └── useAuth()            ← хук бизнес-логики (hooks/)
+        ├── useLoginMutation()    ← TanStack Query (queries/auth/)
+        ├── useRegisterMutation() ← TanStack Query (queries/auth/)
+        └── authStore             ← Zustand: userId, token, secretKey
+
+ChatPage
+  └── useChat(contactId)   ← хук бизнес-логики (hooks/)
+        ├── useMessagesQuery(contactId)    ← TanStack Query (queries/messages/)
+        ├── useSendMessageMutation()       ← TanStack Query (queries/messages/)
+        ├── chatStore                      ← Zustand: activeContactId, typingUsers, onlineUsers
+        └── socketStore                    ← Zustand: socket, connected
+
+ProfilePage / ContactList
+  └── useContacts()        ← хук бизнес-логики (hooks/)
+        ├── useContactsQuery()       ← TanStack Query (queries/contacts/)
+        └── useAddContactMutation()  ← TanStack Query (queries/contacts/)
+```
+
+**Принцип разделения:**
+- **TanStack Query (`queries/`)** — всё что ходит в сеть или IndexedDB: загрузка, отправка, кеширование, инвалидация. `queryFn` и `mutationFn` вызывают функции из `foxgram-core` или `services/`.
+- **Zustand (`stores/`)** — синхронный глобальный стейт, который не является серверными данными: токен сессии, секретный ключ в памяти, активный контакт, WebSocket-соединение, статусы typing/online.
+- **Хуки (`hooks/`)** — оркестрируют queries + stores для конкретного раздела UI. Страница импортирует только хук раздела, не запросы напрямую.
+
+---
+
+## 12. Zustand-хранилища
 
 ### authStore
 
@@ -365,31 +440,34 @@ foxgram://add?u=<username>&id=<userId>&k=<publicKey_base64url>
 interface AuthState {
   userId: string | null
   username: string | null
-  token: string | null
+  token: string | null  // только в памяти — для socket.io handshake
   publicKey: string | null
-  secretKey: string | null  // в памяти, не в хранилище
+  secretKey: string | null  // в памяти, не сохраняется
   isAuthenticated: boolean
-  login: (username: string, password: string) => Promise<void>
-  register: (username: string, password: string) => Promise<void>
+  setAuth: (data: AuthData) => void
+  setSecretKey: (key: string) => void
   logout: () => void
-  unlockKeys: (password: string) => Promise<void>  // расшифровать secretKey из IDB
 }
 ```
+
+> Логика login/register вынесена в `useLoginMutation` / `useRegisterMutation` (TanStack Query). После успеха мутация вызывает `authStore.setAuth(...)`.
+
+> **Хранение токена:** HTTP API-запросы авторизуются автоматически через HttpOnly-куку `foxgram_token` (устанавливается сервером при логине). В `authStore.token` токен хранится только в памяти — исключительно для передачи в socket.io handshake (`{ auth: { token } }`). После перезагрузки страницы куку браузер сохраняет, но `authStore.token` сбрасывается — пользователю нужно повторно ввести пароль для расшифровки `secretKey` из IndexedDB.
 
 ### chatStore
 
 ```typescript
 interface ChatState {
-  contacts: Contact[]
-  messages: Record<string, DecryptedMessage[]>  // contactId → messages
   activeContactId: string | null
-  typingUsers: Set<string>  // userId-ы которые сейчас печатают
+  typingUsers: Set<string>   // userId-ы которые сейчас печатают
   onlineUsers: Set<string>
-  sendMessage: (contactId: string, text: string) => Promise<void>
-  loadMessages: (contactId: string) => Promise<void>
   setActiveContact: (contactId: string) => void
+  setTyping: (userId: string, isTyping: boolean) => void
+  setOnline: (userId: string, isOnline: boolean) => void
 }
 ```
+
+> Список контактов и сообщения хранятся в TanStack Query cache (источник — IndexedDB через `foxgram-core`).
 
 ### socketStore
 
@@ -406,7 +484,7 @@ interface SocketState {
 
 ---
 
-## 12. Экраны
+## 13. Экраны
 
 ### LoginPage / RegisterPage
 
@@ -443,7 +521,7 @@ interface SocketState {
 - Поля: username, userId (UUID), publicKey (base64url 32 байта)
 - Валидация форматов
 
-Кнопка "Добавить" → сохранить в IndexedDB → обновить contactsStore
+Кнопка "Добавить" → `useAddContactMutation` → сохранить в IndexedDB → инвалидировать `useContactsQuery`
 
 ### ProfilePage
 
@@ -456,7 +534,7 @@ interface SocketState {
 
 ---
 
-## 13. WebSocket-флоу
+## 14. WebSocket-флоу
 
 ### Подключение
 
@@ -474,8 +552,8 @@ interface SocketState {
 1. Сервер получает POST /api/messages/send
 2. Сохраняет в БД
 3. socket.to(recipientSocket).emit('message:new', message)
-4. Клиент: decrypt(message, senderPublicKey) → chatStore.messages
-5. Записать расшифрованное в IndexedDB
+4. Клиент: decrypt(message, senderPublicKey) → записать в IndexedDB
+5. Инвалидировать useMessagesQuery(contactId) → TanStack Query перезагружает список
 6. Если получатель offline → Web Push
 ```
 
@@ -490,10 +568,11 @@ interface SocketState {
 
 ---
 
-## 14. Безопасность
+## 15. Безопасность
 
 | Угроза | Защита |
 |--------|--------|
+| XSS → кража JWT | Токен в HttpOnly-куке — недоступен из JS |
 | XSS → кража секретного ключа | Ключ в памяти только во время сессии; в IDB только зашифрованная версия |
 | Перехват трафика | HTTPS (TLS) в production |
 | Компрометация сервера | E2E шифрование — сервер хранит только зашифрованный контент |
@@ -504,7 +583,7 @@ interface SocketState {
 
 ---
 
-## 15. Конфигурация окружения
+## 16. Конфигурация окружения
 
 ### `packages/web/.env`
 
@@ -523,7 +602,7 @@ VAPID_EMAIL=mailto:admin@example.com
 
 ---
 
-## 16. Скрипты
+## 17. Скрипты
 
 ```jsonc
 // packages/web/package.json
@@ -538,13 +617,4 @@ VAPID_EMAIL=mailto:admin@example.com
 
 ---
 
-## 17. Вне MVP (backlog)
 
-- Групповые чаты
-- Редактирование / удаление сообщений
-- Вложения (файлы, изображения)
-- Экспорт/импорт ключей (backup)
-- Несколько устройств (multi-device sync ключей)
-- Desktop push (Electron-обёртка)
-- Статус прочтения
-- Реакции на сообщения

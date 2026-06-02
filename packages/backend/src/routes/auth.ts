@@ -120,6 +120,14 @@ authRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
 
   logger.info(`User logged in: ${username}`);
 
-  // Ответ 200: { token, userId }
+  // Установить токен в HttpOnly cookie (7 дней, SameSite=Strict)
+  res.cookie('foxgram_token', token, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+
+  // Ответ 200: { token, userId } — тело сохраняется для обратной совместимости
   res.status(200).json({ token, userId: user.id });
 });
