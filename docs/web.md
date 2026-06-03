@@ -46,6 +46,8 @@
 
 > **TypeScript:** весь код в `packages/web` — строго TypeScript. Запрещены `any` (eslint `@typescript-eslint/no-explicit-any`). Типы для всех props, store-слайсов и событий socket.io.
 
+> **foxgram-core:** **все** операции с сообщениями и шифрованием выполняются через пакет `foxgram-core`: шифрование исходящих сообщений (`encryptMessage`), расшифровка входящих (`decryptMessage`), генерация ключей (`generateKeyPair`), импорт секретного ключа (`importSecretKey`), получение публичного ключа (`getPublicKey`). Прямые HTTP-запросы к серверу используются **только** для: (1) WebSocket-соединения через socket.io (push-уведомления о новых сообщениях, статусы online/typing), (2) Push-уведомлений (подписка/отписка через `POST/DELETE /api/push/subscribe`). **Никакая** логика шифрования/дешифровки не должна реализовываться напрямую в `packages/web`.
+
 > **shadcn/ui:** компоненты копируются в `src/components/ui/` командой `npx shadcn@latest add <component>`. Не является npm-зависимостью — код живёт в проекте и допускает кастомизацию. Базовая библиотека примитивов — Radix UI. Стили через Tailwind CSS v4 (CSS variables для цветовых токенов темы).
 
 ### Backend (изменения)
@@ -86,16 +88,16 @@ packages/
         useProfile.ts
       queries/         # TanStack Query хуки (queryFn/mutationFn вызывают foxgram-core)
         messages/
-          useMessagesQuery.ts       # useQuery: загрузка сообщений контакта
-          useSendMessageMutation.ts # useMutation: отправка зашифрованного сообщения
+          useMessagesQuery.ts       # useQuery: загрузка сообщений контакта (GET /api/messages/poll через foxgram-core)
+          useSendMessageMutation.ts # useMutation: шифрование через foxgram-core.encryptMessage + отправка через foxgram-core.sendMessage
         contacts/
           useContactsQuery.ts       # useQuery: список контактов из IndexedDB
           useAddContactMutation.ts  # useMutation: добавление контакта
           useAvatarQuery.ts         # useQuery: аватар контакта (auto-generate + cache)
           useAvatarMutation.ts      # useMutation: сохранение аватара в IndexedDB
         auth/
-          useLoginMutation.ts       # useMutation: логин + расшифровка ключей
-          useRegisterMutation.ts    # useMutation: регистрация + генерация keypair
+          useLoginMutation.ts       # useMutation: логин + расшифровка ключей (decrypt secretKey из IndexedDB)
+          useRegisterMutation.ts    # useMutation: регистрация + генерация keypair через foxgram-core.generateKeyPair
       stores/          # Zustand-хранилища (только синхронный/глобальный стейт)
         authStore.ts
         chatStore.ts    # typingUsers, onlineUsers, activeContactId
@@ -104,7 +106,6 @@ packages/
         db.ts          # IndexedDB через idb
         socket.ts      # socket.io клиент
         push.ts        # Web Push подписка
-        crypto.ts      # Обёртка над foxgram-core
         avatar.ts      # Генерация аватаров (canvas + seeded PRNG, см. раздел 13)
       sw/
         service-worker.ts  # Service Worker (PWA + Push)
@@ -203,7 +204,9 @@ push_subscriptions (только localStorage)
 
 ### Политика обновления
 
-При получении сообщений через WebSocket — записывать в `messages`. При открытии чата — сначала показывать из IndexedDB, затем догружать с сервера если online.
+При получении сообщений через WebSocket — записывать в `messages` (raw encrypted format из socket.io). При открытии чата — сначала показывать из IndexedDB, затем догружать с сервера через `foxgram-core.getMessages()` если online.
+
+> **Важно:** в IndexedDB сообщения хранятся в зашифрованном виде (`encryptedContent` из `StoredMessage` из foxgram-core). Расшифровка выполняется через `foxgram-core.decryptMessage()` при чтении из IndexedDB или при получении через WebSocket.
 
 ---
 
@@ -220,7 +223,7 @@ secretKey ──→ AES-GCM(derivedKey, iv=random12) ──→ encryptedSecretKe
 
 При входе: пользователь вводит пароль → derivedKey → расшифровываем `encryptedSecretKey` → держим `secretKey` в памяти (Zustand) на время сессии. После закрытия вкладки — из памяти исчезает.
 
-При регистрации: генерируем X25519 keypair (через foxgram-core), шифруем secretKey паролем, сохраняем в IndexedDB.
+При регистрации: генерируем X25519 keypair через `foxgram-core.generateKeyPair()`, шифруем secretKey паролем, сохраняем в IndexedDB.
 
 ---
 
@@ -438,14 +441,14 @@ foxgram://add?u=<username>&id=<userId>&k=<publicKey_base64url>
 ```
 LoginPage
   └── useAuth()            ← хук бизнес-логики (hooks/)
-        ├── useLoginMutation()    ← TanStack Query (queries/auth/)
-        ├── useRegisterMutation() ← TanStack Query (queries/auth/)
+        ├── useLoginMutation()    ← TanStack Query (queries/auth/): login (foxgram-core) + decrypt secretKey из IndexedDB
+        ├── useRegisterMutation() ← TanStack Query (queries/auth/): register (foxgram-core) + generateKeyPair (foxgram-core)
         └── authStore             ← Zustand: userId, secretKey
 
 ChatPage
   └── useChat(contactId)   ← хук бизнес-логики (hooks/)
-        ├── useMessagesQuery(contactId)    ← TanStack Query (queries/messages/)
-        ├── useSendMessageMutation()       ← TanStack Query (queries/messages/)
+        ├── useMessagesQuery(contactId)    ← TanStack Query: getMessages (foxgram-core) + decryptMessage для каждого сообщения (foxgram-core)
+        ├── useSendMessageMutation()       ← TanStack Query: encryptMessage (foxgram-core) + sendMessage (foxgram-core)
         ├── chatStore                      ← Zustand: activeContactId, typingUsers, onlineUsers
         └── socketStore                    ← Zustand: socket, connected
 
@@ -457,7 +460,9 @@ ProfilePage / ContactList
 ```
 
 **Принцип разделения:**
-- **TanStack Query (`queries/`)** — всё что ходит в сеть или IndexedDB: загрузка, отправка, кеширование, инвалидация. `queryFn` и `mutationFn` вызывают функции из `foxgram-core` или `services/`.
+- **TanStack Query (`queries/`)** — всё что ходит в сеть или IndexedDB: загрузка, отправка, кеширование, инвалидация. `queryFn` и `mutationFn` вызывают функции из `foxgram-core`. **Криптооперации (encryptMessage, decryptMessage)** выполняются исключительно через foxgram-core — **никаких** кастомных реализаций в `packages/web`.
+- **Zustand (`stores/`)** — синхронный глобальный стейт, который не является серверными данными: токен сессии, секретный ключ в памяти, активный контакт, WebSocket-соединение, статусы typing/online.
+- **Хуки (`hooks/`)** — оркестрируют queries + stores для конкретного раздела UI. Страница импортирует только хук раздела, не запросы напрямую.
 - **Zustand (`stores/`)** — синхронный глобальный стейт, который не является серверными данными: токен сессии, секретный ключ в памяти, активный контакт, WebSocket-соединение, статусы typing/online.
 - **Хуки (`hooks/`)** — оркестрируют queries + stores для конкретного раздела UI. Страница импортирует только хук раздела, не запросы напрямую.
 
@@ -718,11 +723,6 @@ packages/web/src/utils/avatar.ts
 - Кнопки: "Скопировать ссылку", "Сохранить QR"
 - Кнопка "Выйти"
 - Переключатель темы (light / dark)
-- Username, userId (копируемый)
-- QR-код собственного профиля (`qrcode.react`)
-- Кнопки: "Скопировать ссылку", "Сохранить QR"
-- Кнопка "Выйти"
-- Переключатель темы (light / dark)
 
 ---
 
@@ -738,15 +738,29 @@ packages/web/src/utils/avatar.ts
 5. Broadcast: user:online { userId }
 ```
 
-### Получение сообщения
+### Получение сообщения (WebSocket)
 
 ```
 1. Сервер получает POST /api/messages/send
 2. Сохраняет в БД
 3. socket.to(recipientSocket).emit('message:new', message)
-4. Клиент: decrypt(message, senderPublicKey) → записать в IndexedDB
-5. Инвалидировать useMessagesQuery(contactId) → TanStack Query перезагружает список
-6. Если получатель offline → Web Push
+4. Клиент (socket event handler): получает `message` типа `StoredMessage` (foxgram-core)
+5. Клиент: записать `message` (encryptedContent) в IndexedDB — **без расшифровки на клиенте**
+6. Инвалидировать useMessagesQuery(contactId) → TanStack Query перезагружает список
+7. При отображении: TanStack Query queryFn вызывает `foxgram-core.decryptMessage()` для каждого сообщения
+8. Если получатель offline → Web Push (только уведомление, без текста сообщения — E2E приватность)
+```
+
+### Отправка сообщения (через foxgram-core)
+
+```
+1. Пользователь вводит текст → нажимает отправку
+2. useSendMessageMutation.mutate() вызывает:
+   a) foxgram-core.encryptMessage({ message, mySecretKey, theirPublicKey }) → { encryptedContent, nonce }
+   b) foxgram-core.sendMessage(recipientId, encryptedContent) → POST /api/messages/send
+3. Сервер: сохраняет в БД
+4. Сервер: socket.to(recipientSocket).emit('message:new', message)
+5. Клиент: инвалидировать useMessagesQuery(contactId) → TanStack Query обновляет UI
 ```
 
 ### Typing indicator
@@ -808,5 +822,6 @@ VAPID_EMAIL=mailto:admin@example.com
 ```
 
 ---
+
 
 
