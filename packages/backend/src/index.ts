@@ -10,12 +10,17 @@ import 'dotenv/config';
 import { app } from './app';
 import { loadConfig } from './config';
 import { logger } from './logger';
+import { createSocketIO } from './socket';
 
 const config = loadConfig();
 
 // Запускаем сервер
 export const server = app.listen(config.port, () => {
   logger.info(`Server running on port ${config.port}`);
+
+  // Инициализируем Socket.IO поверх http.Server
+  createSocketIO(server);
+  logger.info('Socket.IO initialized');
 });
 
 /**
